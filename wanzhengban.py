@@ -343,7 +343,7 @@ def export_airfoil_profiles(mesh_para, cst_order, output_dir="airfoil_profiles",
     return exported_count
 
 if __name__ == "__main__":
-    mesh_para = pd.read_csv(r"mesh_para\increase_cabin.csv").to_numpy()
+    mesh_para = pd.read_csv(r"increase_cabin.csv").to_numpy()
     cst_order = 8
     N1 = 0.5
     N2 = 1
