@@ -4,10 +4,6 @@ import matplotlib.pyplot as plt
 from scipy.special import comb
 import os
 
-class Section:
-    def __init__(self, y_pos, points):
-        self.y_pos = y_pos  # 展向位置
-        self.points = points  # 弦向点坐标数组，形状为(N, 2)
 
 def process_airfoil_coordinates(data):
     x = data[:,0]
