@@ -161,7 +161,7 @@ if __name__ == "__main__":
         # print(y, coeffs, le, te, z_offset, dy_upper, dy_lower)
     mesh_para = np.array(mesh_para)
     csv_data = pd.DataFrame(mesh_para)
-    csv_data.to_csv(r"increase_cabin.csv", index=None)
+    csv_data.to_csv(r"increase_cabin.csv", index=False)
     mesh_para = pd.read_csv(r"increase_cabin.csv").to_numpy()
     print(mesh_para)
     plt.show()
