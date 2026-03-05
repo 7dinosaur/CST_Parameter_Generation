@@ -132,7 +132,7 @@ def flatten(data):
      return np.array(data).flatten()
 
 if __name__ == "__main__":
-    folder_path = r"D:\hyper_ly\tmp\sections\increase_cabin_sec"
+    folder_path = r"increase_cabin_sec"
     file_names = os.listdir(folder_path)
     print(file_names)
     y_list = []
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         # print(y, coeffs, le, te, z_offset, dy_upper, dy_lower)
     mesh_para = np.array(mesh_para)
     csv_data = pd.DataFrame(mesh_para)
-    csv_data.to_csv(r"mesh_para\increase_cabin.csv", index=None)
-    mesh_para = pd.read_csv(r"mesh_para\increase_cabin.csv").to_numpy()
+    csv_data.to_csv(r"increase_cabin.csv", index=None)
+    mesh_para = pd.read_csv(r"increase_cabin.csv").to_numpy()
     print(mesh_para)
     plt.show()
