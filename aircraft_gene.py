@@ -1,22 +1,24 @@
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from numpy import ndarray
 import scipy.interpolate as si
 from scipy.special import comb
 from matplotlib import pyplot as plt
 
 class Aircraft:
-    def __init__(self, para_file : str) -> None:
-        self.origin_para = self.read_csv(para_file)
-        self.cst_order = int(0.5 * (self.origin_para.shape[1] - 8))
+    def __init__(self) -> None:
+        self.origin_para:ndarray = np.array([0])
+        self.cst_order:int = 0
         self.N1 = 0.5
         self.N2 = 1
         self.air_mesh:NDArray = np.array([0])
         self.panel_mesh:NDArray = np.array([0])
 
-    def read_csv(self, csv_file : str) -> NDArray:
+    def read_from_csv(self, csv_file : str) -> None: #从csv文件读取参数
         mesh_para = pd.read_csv(csv_file).to_numpy()
-        return mesh_para
+        self.origin_para:ndarray = mesh_para
+        self.cst_order = int(0.5 * (self.origin_para.shape[1] - 8))
     
     def interp_para(self, num_span) -> NDArray: #补全对称条件并插值参数列表
         ori_para = self.origin_para
@@ -80,11 +82,24 @@ class Aircraft:
     def gene_panel_mesh(self, para) -> None:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """panel_mesh是可以直接输入faboom程序计算的分块网格"""
+
+        this_para = self.interp_para(61) ##此处插值仅保证曲线光滑，实际网格尺度与插值长度无关
+
+        ##统一网格尺度设置
+        nose_i, body_i, tail_i = 31, 60, 10
+        nose_j = body_j = tail_j = 10
+        wing_i = body_i
+        wing_j = 29
+
+        ##头部网格计算
+        dom1, dom2 = np.zeros([nose_i, nose_j]), np.zeros([nose_i, nose_j])
+        
+        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 12)] ##由于分块网格长度尺度不统一用列表存储
     
     def write_mesh(self, mesh:NDArray | list, file_path:str) -> None:
         with open(file_path, 'w') as f:
             if type(mesh) == np.ndarray: #simple mesh
-                print("写入一般网格")
+                print("写入一般网格...")
                 n_dom = mesh.shape[0]
                 n_i = mesh.shape[1]
                 n_j = mesh.shape[2]
@@ -95,14 +110,15 @@ class Aircraft:
                     dom = dom.transpose(2, 1, 0).flatten().reshape([-1, 5])
                     for line in dom:
                         f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
-
+                print(f"写入完毕,网格形状为[{n_i},{n_j}]. 网格文件路径：{file_path}")
     
 class Aircraft_generator:
     def __init__(self, ) -> None:
         pass
 
 if __name__ == "__main__":
-    air_para = Aircraft("increase_cabin.csv")
+    air_para = Aircraft()
+    air_para.read_from_csv("increase_cabin.csv")
     air_para.gene_simple_mesh(41, 60)
     test_mesh = air_para.air_mesh
     air_para.write_mesh(test_mesh, "test_mesh.x")
