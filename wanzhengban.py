@@ -350,14 +350,14 @@ if __name__ == "__main__":
     export_airfoil_profiles(mesh_para, cst_order, output_dir="airfoil_profiles_original")
     sections = []
     # interpolated_cst = interpolate_cst(mesh_para, 3)
-    interpolated_cst = interpolate_cst3(mesh_para, 161)
+    interpolated_cst = interpolate_cst3(mesh_para, 41)
     # interpolated_cst = mesh_para
     for data in interpolated_cst:
         cst = np.array([data[1:cst_order+2],data[cst_order+2:(cst_order+1)*2+1]])
         # print(cst)
         # coords = reconstruct_airfoil(cst, cst_order, data[-2], data[-1], N1, N2)
         # coords = reconstruct_truefile(coords, data[-5], data[-4], data[-3])
-        coords = reconstruct(cst, cst_order, data[-5], data[-4], data[-3], data[-2], data[-1], N1, N2, 261)
+        coords = reconstruct(cst, cst_order, data[-5], data[-4], data[-3], data[-2], data[-1], N1, N2, 61)
         # section.append(coords)
         sections.append((data[0], coords))
     generate_3d_mesh(sections, r"geo\increase_cabin.x")
