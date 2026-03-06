@@ -52,8 +52,8 @@ class Aircraft:
         # self.interped_para = full_para
         return full_para
     
-    def cst_rec(self, coeffs, cst_order, le, te, z_offset, dy_upper=0, dy_lower=0, N1=0.5, N2=1, n_points=60):
-        psi = np.linspace(0, 1, n_points)
+    def cst_rec(self, coeffs, cst_order, le, te, z_offset, dy_upper=0, dy_lower=0, N1=0.5, N2=1, n_points=60, psi_end=1.0):
+        psi = np.linspace(0, psi_end, n_points)
         coeffs_upper = coeffs[0]
         coeffs_lower = coeffs[1]
         
@@ -95,6 +95,29 @@ class Aircraft:
     def gene_panel_mesh(self) -> list[ndarray]:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """panel_mesh是可以直接输入faboom程序计算的分块网格"""
+        def redistribution(x, y, n):
+            xtmp = np.linspace(x[0], x[-1], 100)
+            x = np.append(-np.array(x)[1:][::-1], np.array(x))
+            y = np.append(np.array(y)[1:][::-1], np.array(y))
+
+            fx = si.Akima1DInterpolator(x, y)
+
+            y_tmp = fx(xtmp)
+            L = np.zeros(100)
+            for i in range(100 - 1):
+                dx = xtmp[i+1] - xtmp[i]
+                dy = y_tmp[i+1] - y_tmp[i]
+                L[i+1] = (dx**2 + dy**2)**0.5 + L[i]
+            l_total = L[-1]
+            L_inv = si.interp1d(L, xtmp, kind=2)
+            dL = l_total/(n-1)
+            L_pingjun = []
+            for i in range(n):
+                L_pingjun.append(dL*i)
+            x_pingjun = np.append(L_inv(L_pingjun[:-1]), x[-1])
+            y_pingjun = fx(x_pingjun)
+
+            return x_pingjun, y_pingjun
 
         this_para = self.interp_para(61) ##此处插值仅保证曲线光滑，实际网格尺度与插值长度无关
         order = self.cst_order
@@ -117,10 +140,25 @@ class Aircraft:
 
         ##机头网格计算
         #===================================#
-        leading_edge = this_para[:, 2*order+3]
-        leading_deri = deri_1d(leading_edge, this_para[:, 0])
-        # plt.plot(leading_edge, this_para[:, 0])
-        plt.plot(leading_edge, leading_deri)
+        leading_edge_x = this_para[:, 2*order+3]
+        leading_edge_z = this_para[:, 2*order+5]
+        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind=2)
+        f_leading_xz = si.interp1d(leading_edge_z, this_para[:, 0], kind=2)
+        leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
+        mask = (leading_edge_x > 3)&(leading_deri > 0.15)
+        idx = np.argmax(mask)
+        dom1_end = leading_edge_x[idx] ##自动选择网格切分点
+        dom1_start = leading_edge_x[0]
+
+        x_list = np.linspace(dom1_start, dom1_end, nose_i)
+        delta_y = this_para[1, 0] - this_para[0, 0]
+        for x in x_list[1:]:
+            this_y_end = f_leading_xy(x)
+            this_z_end = f_leading_xz(x)
+            mask = this_para[:, 0] < this_y_end - 0.3*delta_y
+            tmp_para = this_para[mask].copy()
+            print(tmp_para[-1, 0])
+
         #===================================#
 
         ##机身网格计算
