@@ -143,7 +143,7 @@ class Aircraft:
         leading_edge_x = this_para[:, 2*order+3]
         leading_edge_z = this_para[:, 2*order+5]
         f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind=2)
-        f_leading_xz = si.interp1d(leading_edge_z, this_para[:, 0], kind=2)
+        f_leading_xz = si.interp1d(leading_edge_x, this_para[:, -3], kind=2)
         leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
         mask = (leading_edge_x > 3)&(leading_deri > 0.15)
         idx = np.argmax(mask)
