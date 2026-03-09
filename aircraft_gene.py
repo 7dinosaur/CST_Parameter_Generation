@@ -33,7 +33,7 @@ class Aircraft:
         self.origin_para:ndarray = mesh_para
         self.cst_order = int(0.5 * (self.origin_para.shape[1] - 8))
     
-    def interp_para(self, num_span) -> NDArray: #补全对称条件并插值参数列表
+    def interp_para(self, num_span) -> ndarray: #补全对称条件并插值参数列表
         ori_para = self.origin_para
         y_list = ori_para[:, 0]
         full_y_list = np.append(-y_list[1:][::-1], y_list)
@@ -50,6 +50,25 @@ class Aircraft:
             para = f(full_y).reshape([-1,1])
             full_para = np.append(full_para, para, axis=1)
         # self.interped_para = full_para
+        return full_para
+    
+    def interp_single_para(self, y) -> ndarray: #插值单一剖面参数
+        ori_para = self.origin_para
+        y_list = ori_para[:, 0]
+        full_y_list = np.append(-y_list[1:][::-1], y_list)
+        full_para = np.empty([1, self.origin_para.shape[1]])
+        full_para[0] = y
+
+        for j in range(self.origin_para.shape[1]-1):
+            full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
+            
+            if j == ori_para.shape[1]-5: #后缘保持一阶连续
+                f = si.interp1d(full_y_list, full_mesh_para, kind='linear')
+            else:
+                f = si.interp1d(full_y_list, full_mesh_para, kind='quadratic')
+            para = f(y)
+            full_para[0, j+1] = para
+
         return full_para
     
     def cst_rec(self, coeffs, cst_order, le, te, z_offset, dy_upper=0, dy_lower=0, N1=0.5, N2=1, n_points=60, psi_end=1.0):
@@ -157,8 +176,9 @@ class Aircraft:
             this_z_end = f_leading_xz(x)
             mask = this_para[:, 0] < this_y_end - 0.3*delta_y
             tmp_para = this_para[mask].copy()
-            print(tmp_para[-1, 0])
-
+            end_para = self.interp_single_para(this_y_end)
+            if end_para[0, 0] - this_y_end != 0:
+                print(end_para[0, 0])
         #===================================#
 
         ##机身网格计算
