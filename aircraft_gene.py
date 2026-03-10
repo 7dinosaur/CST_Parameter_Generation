@@ -148,14 +148,14 @@ class Aircraft:
         wing_j = 29
 
         ##头部网格计算
-        dom1, dom2 = np.zeros([nose_i, nose_j]), np.zeros([nose_i, nose_j]) ##机头网格
-        dom3, dom4 = np.zeros([body_i, body_j]), np.zeros([body_i, body_j]) ##机身网格
-        dom5 = np.zeros([body_i, 2]) ##机翼上表面与尾涡面相连的网格
-        dom6, dom7 = np.zeros([wing_i, wing_j-1]), np.zeros([wing_i, wing_j-1]) ##机翼网格
-        dom8 = np.zeros([body_i, 2]) ##翼尖网格
-        dom9, dom10 = np.zeros([tail_i, tail_j]), np.zeros([tail_i, tail_j]) ##尾部网格
-        dom11 = np.zeros([tail_j, 2]) ##钝底网格
-        dom12 = np.zeros([tail_i+1, 2]) ##尾涡面网格
+        dom1, dom2 = np.zeros([nose_i, nose_j, 3]), np.zeros([nose_i, nose_j, 3]) ##机头网格
+        dom3, dom4 = np.zeros([body_i, body_j, 3]), np.zeros([body_i, body_j, 3]) ##机身网格
+        dom5 = np.zeros([body_i, 2, 3]) ##机翼上表面与尾涡面相连的网格
+        dom6, dom7 = np.zeros([wing_i, wing_j-1, 3]), np.zeros([wing_i, wing_j-1, 3]) ##机翼网格
+        dom8 = np.zeros([body_i, 2, 3]) ##翼尖网格
+        dom9, dom10 = np.zeros([tail_i, tail_j, 3]), np.zeros([tail_i, tail_j, 3]) ##尾部网格
+        dom11 = np.zeros([tail_j, 2, 3]) ##钝底网格
+        dom12 = np.zeros([tail_i+1, 2, 3]) ##尾涡面网格
 
         ##机头网格计算
         #===================================#
@@ -171,24 +171,32 @@ class Aircraft:
 
         x_list = np.linspace(dom1_start, dom1_end, nose_i)
         delta_y = this_para[1, 0] - this_para[0, 0]
-        for x in x_list[1:]:
+        dom1[0, :, 0] = dom2[0, :, 0] = this_para[0, -5]
+        dom1[0, :, 1] = dom2[0, :, 1] = this_para[0, 0]
+        dom1[0, :, 2] = dom2[0, :, 2] = this_para[0, -3]
+        for i, x in enumerate(x_list[1:]):
             this_y_end = f_leading_xy(x)
             this_z_end = f_leading_xz(x)
             mask = this_para[:, 0] < this_y_end - 0.1*delta_y
             tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
-            coords_this = np.zeros([tmp_para.shape[0]+1, 3])
+            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
             coords_this[:, 0] = x
             coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
             for idx, da in enumerate(tmp_para):
                 psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
-                print(psi_end)
                 cst = np.array([da[1:order+2],da[order+2:(order+1)*2+1]])
                 z_u, z_l = self.cst_rec(cst, order, da[-5], da[-4], da[-3], da[-2], da[-1], self.N1, self.N2, 2, psi_end)
                 coords_this[idx, 2] = z_u[1, -1]
+                coords_this[idx, 3] = z_l[1, -1]
             coords_this[-1, 2] = this_z_end
+            coords_this[-1, 3] = this_z_end
+            new_coords = np.ones([nose_j, 3]) * x
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], nose_j)
+            dom1[i+1] = new_coords
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
+            dom2[i+1] = new_coords
 
-        print(coords_this)
-        plt.plot(coords_this[:, 1], coords_this[:, 2])
+        print(dom1[-1], dom2[-1])
             # end_para = self.interp_single_para(this_y_end)
         #===================================#
 
