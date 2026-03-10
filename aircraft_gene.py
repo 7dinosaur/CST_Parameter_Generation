@@ -174,11 +174,22 @@ class Aircraft:
         for x in x_list[1:]:
             this_y_end = f_leading_xy(x)
             this_z_end = f_leading_xz(x)
-            mask = this_para[:, 0] < this_y_end - 0.3*delta_y
-            tmp_para = this_para[mask].copy()
-            end_para = self.interp_single_para(this_y_end)
-            if end_para[0, 0] - this_y_end != 0:
-                print(end_para[0, 0])
+            mask = this_para[:, 0] < this_y_end - 0.1*delta_y
+            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
+            coords_this = np.zeros([tmp_para.shape[0]+1, 3])
+            coords_this[:, 0] = x
+            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
+            for idx, da in enumerate(tmp_para):
+                psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
+                print(psi_end)
+                cst = np.array([da[1:order+2],da[order+2:(order+1)*2+1]])
+                z_u, z_l = self.cst_rec(cst, order, da[-5], da[-4], da[-3], da[-2], da[-1], self.N1, self.N2, 2, psi_end)
+                coords_this[idx, 2] = z_u[1, -1]
+            coords_this[-1, 2] = this_z_end
+
+        print(coords_this)
+        plt.plot(coords_this[:, 1], coords_this[:, 2])
+            # end_para = self.interp_single_para(this_y_end)
         #===================================#
 
         ##机身网格计算
