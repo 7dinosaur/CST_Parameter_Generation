@@ -56,7 +56,7 @@ class Aircraft:
         ori_para = self.origin_para
         y_list = ori_para[:, 0]
         full_y_list = np.append(-y_list[1:][::-1], y_list)
-        full_para = np.empty([1, self.origin_para.shape[1]])
+        full_para = np.empty([self.origin_para.shape[1],])
         full_para[0] = y
 
         for j in range(self.origin_para.shape[1]-1):
@@ -67,7 +67,7 @@ class Aircraft:
             else:
                 f = si.interp1d(full_y_list, full_mesh_para, kind='quadratic')
             para = f(y)
-            full_para[0, j+1] = para
+            full_para[j+1] = para
 
         return full_para
     
@@ -204,10 +204,35 @@ class Aircraft:
         trailing_edge_x = this_para[:, -4]
         f_trailing_xy = si.interp1d(this_para[:, 0], trailing_edge_x, kind=2)
         x_end = f_trailing_xy(this_y_end)
-        print(x_begin, x_end)
         x_list = np.linspace(x_begin, x_end, body_i)
+        wing_line = self.interp_single_para(this_y_end)
+        cst = np.array([wing_line[1:order+2],wing_line[order+2:(order+1)*2+1]])
+        end_u, end_l = self.cst_rec(cst, order, wing_line[-5], wing_line[-4], 
+                                    wing_line[-3], wing_line[-2], wing_line[-1], self.N1, self.N2, len(x_list))
         for i, x in enumerate(x_list):
-            pass
+            mask = this_para[:, 0] < this_y_end - 0.1*delta_y
+            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
+            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
+            coords_this[:, 0] = x
+            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
+            for idx, da in enumerate(tmp_para):
+                psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
+                cst = np.array([da[1:order+2],da[order+2:(order+1)*2+1]])
+                z_u, z_l = self.cst_rec(cst, order, da[-5], da[-4], da[-3], da[-2], da[-1], self.N1, self.N2, 2, psi_end)
+                coords_this[idx, 2] = z_u[1, -1]
+                coords_this[idx, 3] = z_l[1, -1]
+            coords_this[-1, 2] = end_u[1, i]
+            coords_this[-1, 3] = end_l[1, i]
+            new_coords = np.ones([body_j, 3]) * x
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], body_j)
+            dom3[i] = new_coords
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], body_j)
+            dom4[i] = new_coords
+        #===================================#
+
+        ##机翼网格计算
+        #===================================#
+        
         #===================================#
         
         panel_mesh = [locals()[f"dom{i}"] for i in range(1, 12)] ##由于分块网格长度尺度不统一用列表存储
