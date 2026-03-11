@@ -33,8 +33,9 @@ class Aircraft:
         self.origin_para:ndarray = mesh_para
         self.cst_order = int(0.5 * (self.origin_para.shape[1] - 8))
     
-    def interp_para(self, num_span) -> ndarray: #补全对称条件并插值参数列表
-        ori_para = self.origin_para
+    def interp_para(self, num_span, ori_para = None) -> ndarray: #补全对称条件并插值参数列表
+        if ori_para is None:
+            ori_para = self.origin_para
         y_list = ori_para[:, 0]
         full_y_list = np.append(-y_list[1:][::-1], y_list)
         full_y = np.linspace(y_list[0], y_list[-1], num_span)
@@ -71,15 +72,20 @@ class Aircraft:
 
         return full_para
     
-    def cst_rec(self, coeffs, cst_order, le, te, z_offset, dy_upper=0, dy_lower=0, N1=0.5, N2=1, n_points=60, psi_end=1.0):
+    def cst_rec(self, para, N1=0.5, N2=1, n_points=60, psi_end=1.0):
+        ##从参数列表提取参数赋值变量
+        order = int((len(para) - 8)/2)
+        coeffs = np.array([para[1:order+2],para[order+2:(order+1)*2+1]])
+        le = para[-5]; te = para[-4]; z_offset = para[-3]; dy_upper = para[-2]; dy_lower = para[-1]
+
         psi = np.linspace(0, psi_end, n_points)
         coeffs_upper = coeffs[0]
         coeffs_lower = coeffs[1]
         
         # 生成Bernstein基函数
-        B = np.zeros((n_points, cst_order+1))
-        for i in range(cst_order+1):
-            B[:, i] = comb(cst_order, i) * (psi**i) * (1 - psi)**(cst_order-i)
+        B = np.zeros((n_points, order+1))
+        for i in range(order+1):
+            B[:, i] = comb(order, i) * (psi**i) * (1 - psi)**(order-i)
         
         # 计算上下表面坐标
         y_upper = (psi**N1 * (1 - psi)**N2) * (B @ coeffs_upper) + psi*dy_upper
@@ -104,8 +110,7 @@ class Aircraft:
 
         for idx, data in enumerate(this_para):
             mesh[:, idx, :, 1] = data[0]
-            cst = np.array([data[1:order+2],data[order+2:(order+1)*2+1]])
-            coord_u, coord_l = self.cst_rec(cst, order, data[-5], data[-4], data[-3], data[-2], data[-1], self.N1, self.N2, num_chord)
+            coord_u, coord_l = self.cst_rec(data, self.N1, self.N2, num_chord)
             mesh[0, idx, :, [0, 2]] = coord_u
             mesh[1, idx, :, [0, 2]] = coord_l
 
@@ -128,7 +133,7 @@ class Aircraft:
                 dy = y_tmp[i+1] - y_tmp[i]
                 L[i+1] = (dx**2 + dy**2)**0.5 + L[i]
             l_total = L[-1]
-            L_inv = si.interp1d(L, xtmp, kind=2)
+            L_inv = si.interp1d(L, xtmp, kind='quadratic')
             dL = l_total/(n-1)
             L_pingjun = []
             for i in range(n):
@@ -151,7 +156,7 @@ class Aircraft:
         dom1, dom2 = np.zeros([nose_i, nose_j, 3]), np.zeros([nose_i, nose_j, 3]) ##机头网格
         dom3, dom4 = np.zeros([body_i, body_j, 3]), np.zeros([body_i, body_j, 3]) ##机身网格
         dom5 = np.zeros([body_i, 2, 3]) ##机翼上表面与尾涡面相连的网格
-        dom6, dom7 = np.zeros([wing_i, wing_j-1, 3]), np.zeros([wing_i, wing_j-1, 3]) ##机翼网格
+        dom6, dom7 = np.zeros([wing_i, wing_j-1, 3]), np.zeros([wing_i, wing_j, 3]) ##机翼网格
         dom8 = np.zeros([body_i, 2, 3]) ##翼尖网格
         dom9, dom10 = np.zeros([tail_i, tail_j, 3]), np.zeros([tail_i, tail_j, 3]) ##尾部网格
         dom11 = np.zeros([tail_j, 2, 3]) ##钝底网格
@@ -161,10 +166,10 @@ class Aircraft:
         #===================================#
         leading_edge_x = this_para[:, 2*order+3]
         leading_edge_z = this_para[:, 2*order+5]
-        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind=2)
-        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind=2)
+        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
+        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
         leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
-        mask = (leading_edge_x > 3)&(leading_deri > 0.15)
+        mask = (leading_edge_x > 3)&(leading_deri > 0.12)
         idx = np.argmax(mask)
         dom1_end = leading_edge_x[idx] ##自动选择网格切分点
         dom1_start = leading_edge_x[0]
@@ -184,8 +189,7 @@ class Aircraft:
             coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
             for idx, da in enumerate(tmp_para):
                 psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
-                cst = np.array([da[1:order+2],da[order+2:(order+1)*2+1]])
-                z_u, z_l = self.cst_rec(cst, order, da[-5], da[-4], da[-3], da[-2], da[-1], self.N1, self.N2, 2, psi_end)
+                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
                 coords_this[idx, 2] = z_u[1, -1]
                 coords_this[idx, 3] = z_l[1, -1]
             coords_this[-1, 2] = this_z_end
@@ -195,6 +199,7 @@ class Aircraft:
             dom1[i+1] = new_coords
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
             dom2[i+1] = new_coords
+        dom2 = dom2[:, ::-1]
         #===================================#
 
         ##机身网格计算
@@ -202,13 +207,11 @@ class Aircraft:
         ##从后缘曲线截取与机头结束y值相等的x值，确定x范围
         x_begin = dom1_end
         trailing_edge_x = this_para[:, -4]
-        f_trailing_xy = si.interp1d(this_para[:, 0], trailing_edge_x, kind=2)
-        x_end = f_trailing_xy(this_y_end)
+        f_trailing_yx = si.interp1d(this_para[:, 0], trailing_edge_x, kind='quadratic')
+        x_end = f_trailing_yx(this_y_end)
         x_list = np.linspace(x_begin, x_end, body_i)
-        wing_line = self.interp_single_para(this_y_end)
-        cst = np.array([wing_line[1:order+2],wing_line[order+2:(order+1)*2+1]])
-        end_u, end_l = self.cst_rec(cst, order, wing_line[-5], wing_line[-4], 
-                                    wing_line[-3], wing_line[-2], wing_line[-1], self.N1, self.N2, len(x_list))
+        wing_line = self.interp_single_para(this_y_end) ##机翼网格边界可复用
+        end_u, end_l = self.cst_rec(wing_line, self.N1, self.N2, len(x_list))
         for i, x in enumerate(x_list):
             mask = this_para[:, 0] < this_y_end - 0.1*delta_y
             tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
@@ -217,8 +220,7 @@ class Aircraft:
             coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
             for idx, da in enumerate(tmp_para):
                 psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
-                cst = np.array([da[1:order+2],da[order+2:(order+1)*2+1]])
-                z_u, z_l = self.cst_rec(cst, order, da[-5], da[-4], da[-3], da[-2], da[-1], self.N1, self.N2, 2, psi_end)
+                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
                 coords_this[idx, 2] = z_u[1, -1]
                 coords_this[idx, 3] = z_l[1, -1]
             coords_this[-1, 2] = end_u[1, i]
@@ -228,14 +230,89 @@ class Aircraft:
             dom3[i] = new_coords
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], body_j)
             dom4[i] = new_coords
+        dom4 = dom4[:, ::-1]
         #===================================#
 
         ##机翼网格计算
         #===================================#
-        
+        mask = this_para[:, 0] > this_y_end + 0.1*delta_y
+        tmp_para = this_para[mask].copy() #获得从翼身交界面到翼尖位置的参数列表
+        tmp_para = np.append(wing_line.reshape([1, -1]), tmp_para, axis=0)
+        tmp_para = self.interp_para(wing_j, tmp_para)
+        for j, pa in enumerate(tmp_para):
+            y = pa[0]
+            wing_u, wing_l = self.cst_rec(pa, self.N1, self.N2, wing_i)
+            if j <= 1:
+                dom5[:, j, 1] = y
+                dom5[:, j, [0, 2]] = wing_u.T
+            if j >= 1:
+                dom6[:, j-1, 1] = y
+                dom6[:, j-1, [0, 2]] = wing_u.T
+            if j == len(tmp_para) - 1:
+                dom8[:, :, 1] = y
+                dom8[:, 0, [0, 2]] = wing_u.T
+                dom8[:, 1, [0, 2]] = wing_l.T
+            dom7[:, j, 1] = y
+            dom7[:, j, [0, 2]] = wing_l.T
+        dom7 = dom7[:, ::-1]
+        #===================================#
+
+        ##尾部网格计算
+        #===================================#
+        x_begin = x_end
+        x_end = this_para[0, -4]
+        x_list = np.linspace(x_begin, x_end, tail_i)
+        test = trailing_edge_x
+        for i, t in enumerate(test):
+            if test[i+1] > test[i]:
+                print(i)
+                break
+        trailing_edge_x = test[:i]; trailing_edge_y = this_para[:, 0][:i]
+        f_trailing_xy = si.interp1d(trailing_edge_x, trailing_edge_y, kind='quadratic')
+        for i, x in enumerate(x_list[:-1]):
+            this_y_end = f_trailing_xy(x)
+            this_line = self.interp_single_para(this_y_end)
+            mask = this_para[:, 0] < this_y_end - 0.1*delta_y
+            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
+            tmp_para = np.append(tmp_para, this_line.reshape([1, -1]), axis=0)
+            coords_this = np.zeros([tmp_para.shape[0], 4])
+            coords_this[:, 0] = x
+            coords_this[:, 1] = tmp_para[:, 0]
+            for idx, da in enumerate(tmp_para):
+                psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
+                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
+                coords_this[idx, 2] = z_u[1, -1]
+                coords_this[idx, 3] = z_l[1, -1]
+            new_coords = np.ones([tail_j, 3]) * x
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], tail_j)
+            dom9[i] = new_coords
+            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], tail_j)
+            dom10[i] = new_coords
+        dom10 = dom10[:, ::-1]
+        end_z = this_para[0, -3] + (this_para[0, -4] - this_para[0, -5])*this_para[0, -1]
+        dom9[-1, :] = dom10[-1, :] = np.array([this_para[0, -4], this_para[0, 0], end_z])
+        print(this_para[0, 0])
+        #===================================#
+
+        ##钝底网格...呃...赋值
+        #===================================#
+        # dom11[:, 0] = dom9[-1]
+        # dom11[:, 1] = dom10[-1, ::-1]
+        # dom11 = dom11.transpose(1, 0, 2)
+        #===================================#
+
+        ##尾涡面网格计算
+        #===================================#
+        dom12[:-1, 0] = dom9[:, -1]##贴上尾部网格边缘
+        dom12[:, 1, [1, 2]] = dom5[-1, 1, [1, 2]]
+        dom12[:-1, 1, 0] = dom12[:-1, 0, 0]; dom12[-1, 1, 0] = 100
+        dom12[0, 1] = dom5[-1, 1]
+        dom12[-1, 0, [1, 2]] = dom9[-1, 1, [1, 2]]
+        dom12[-1, :, 0] = 100
         #===================================#
         
-        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 12)] ##由于分块网格长度尺度不统一用列表存储
+        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)] ##由于分块网格长度尺度不统一用列表存储
+        panel_mesh.pop(-2)
 
         return panel_mesh
     
@@ -263,9 +340,14 @@ class Aircraft:
                     n_i, n_j = dom.shape[1], dom.shape[0]
                     f.write(f"{n_i} {n_j} 1\n")
                 for dom in mesh:
-                    dom = dom.transpose(2, 0, 1).flatten().reshape([-1, 5])
-                    for line in dom:
-                            f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
+                    dom = dom.transpose(2, 0, 1)
+                    row_size = 4  # 控制每行4个元素
+                    for coord in dom:
+                        coord = coord.flatten()
+                        for i in range(0, len(coord), row_size):
+                            line_elements = coord[i:i+row_size]
+                            line_str = " ".join(f"{x:.6f}" for x in line_elements)
+                            f.write(line_str + "\n")
                 print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
     def cal_volume(self):
@@ -286,6 +368,6 @@ if __name__ == "__main__":
     # air_para.gene_simple_mesh(41, 60)
     test_mesh = air_para.gene_panel_mesh()
     # air_para.write_mesh(test_mesh, "test_mesh.x")
-    air_para.write_mesh(test_mesh, "geo.x")
+    air_para.write_mesh(test_mesh, "FABOOM_test\\indata\\geo.x")
 
     plt.show()
