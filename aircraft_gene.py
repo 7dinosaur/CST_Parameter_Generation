@@ -196,7 +196,6 @@ class Aircraft:
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
             dom2[i+1] = new_coords
 
-        print(dom1[-1], dom2[-1])
             # end_para = self.interp_single_para(this_y_end)
         #===================================#
 
@@ -230,6 +229,30 @@ class Aircraft:
                 for dom in mesh:
                     n_i, n_j = dom.shape[0], dom.shape[1]
                     f.write(f"{n_i} {n_j} 1\n")
+
+    def write_panel_mesh(self, panel_mesh:list, file_path:str) -> None:
+        n_dom = len(panel_mesh)
+
+        with open(file_path, 'w') as f:
+            # 存储所有网格点
+            f.write(f"{n_dom}\n")
+            for dom in panel_mesh:
+                f.write(f"{dom.shape[1]} {dom.shape[0]} 1\n")
+
+            for dom in panel_mesh:
+                dom = dom.transpose(2, 0, 1).flatten().reshape([-1, 5])
+                for line in dom:
+                        f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
+        
+        print(f"写入完毕")
+
+    def cal_volume(self):
+        height_cabin = 2 #客舱高度为2m
+        weight_cabin = 3.6 #客舱宽度为3.6m
+        half_weight = 0.5 * weight_cabin
+        para = self.interp_para(51)
+        for spara in para:
+            pass
     
 class Aircraft_generator:
     def __init__(self, ) -> None:
@@ -240,6 +263,7 @@ if __name__ == "__main__":
     air_para.read_from_csv("increase_cabin.csv")
     # air_para.gene_simple_mesh(41, 60)
     test_mesh = air_para.gene_panel_mesh()
-    # test_mesh = air_para.air_mesh
-    air_para.write_mesh(test_mesh, "test_mesh.x")
+    # air_para.write_mesh(test_mesh, "test_mesh.x")
+    air_para.write_panel_mesh(test_mesh, "geo.x")
+
     plt.show()
