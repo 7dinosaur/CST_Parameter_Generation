@@ -162,7 +162,7 @@ class Aircraft:
         leading_edge_x = this_para[:, 2*order+3]
         leading_edge_z = this_para[:, 2*order+5]
         f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind=2)
-        f_leading_xz = si.interp1d(leading_edge_x, this_para[:, -3], kind=2)
+        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind=2)
         leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
         mask = (leading_edge_x > 3)&(leading_deri > 0.15)
         idx = np.argmax(mask)
@@ -195,12 +195,19 @@ class Aircraft:
             dom1[i+1] = new_coords
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
             dom2[i+1] = new_coords
-
-            # end_para = self.interp_single_para(this_y_end)
         #===================================#
 
         ##机身网格计算
         #===================================#
+        ##从后缘曲线截取与机头结束y值相等的x值，确定x范围
+        x_begin = dom1_end
+        trailing_edge_x = this_para[:, -4]
+        f_trailing_xy = si.interp1d(this_para[:, 0], trailing_edge_x, kind=2)
+        x_end = f_trailing_xy(this_y_end)
+        print(x_begin, x_end)
+        x_list = np.linspace(x_begin, x_end, body_i)
+        for i, x in enumerate(x_list):
+            pass
         #===================================#
         
         panel_mesh = [locals()[f"dom{i}"] for i in range(1, 12)] ##由于分块网格长度尺度不统一用列表存储
@@ -208,8 +215,9 @@ class Aircraft:
         return panel_mesh
     
     def write_mesh(self, mesh:NDArray | list, file_path:str) -> None:
+        """自动识别网格类型并写入文件"""
         with open(file_path, 'w') as f:
-            if type(mesh) == np.ndarray: #simple mesh
+            if type(mesh) == ndarray: #simple mesh
                 print("写入一般网格...")
                 n_dom = mesh.shape[0]
                 n_i = mesh.shape[1]
@@ -227,24 +235,13 @@ class Aircraft:
                 print("写入面元网格...")
                 f.write(f"{len(mesh)}\n")
                 for dom in mesh:
-                    n_i, n_j = dom.shape[0], dom.shape[1]
+                    n_i, n_j = dom.shape[1], dom.shape[0]
                     f.write(f"{n_i} {n_j} 1\n")
-
-    def write_panel_mesh(self, panel_mesh:list, file_path:str) -> None:
-        n_dom = len(panel_mesh)
-
-        with open(file_path, 'w') as f:
-            # 存储所有网格点
-            f.write(f"{n_dom}\n")
-            for dom in panel_mesh:
-                f.write(f"{dom.shape[1]} {dom.shape[0]} 1\n")
-
-            for dom in panel_mesh:
-                dom = dom.transpose(2, 0, 1).flatten().reshape([-1, 5])
-                for line in dom:
-                        f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
-        
-        print(f"写入完毕")
+                for dom in mesh:
+                    dom = dom.transpose(2, 0, 1).flatten().reshape([-1, 5])
+                    for line in dom:
+                            f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
+                print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
     def cal_volume(self):
         height_cabin = 2 #客舱高度为2m
@@ -264,6 +261,6 @@ if __name__ == "__main__":
     # air_para.gene_simple_mesh(41, 60)
     test_mesh = air_para.gene_panel_mesh()
     # air_para.write_mesh(test_mesh, "test_mesh.x")
-    air_para.write_panel_mesh(test_mesh, "geo.x")
+    air_para.write_mesh(test_mesh, "geo.x")
 
     plt.show()
