@@ -5,3 +5,7 @@
 ### 1. wanzhengban.py  
 读取参数列表生成一般网格（仅表征几何，无法计算），对应  
 `aircraft_gene.py/gene_simple_mesh`
+
+### 2. multi_domain_new.py
+读取列表参数生成面元网格(用于panair输入)，对应
+`aircraft_gene.py/gene_panel_mesh`

@@ -351,12 +351,45 @@ class Aircraft:
                 print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
     def cal_volume(self):
+        """从对称面开始扫描索引,基准为2座位,每次增加一个座位,并评估载客量最多的方案"""
         height_cabin = 2 #客舱高度为2m
-        weight_cabin = 3.6 #客舱宽度为3.6m
-        half_weight = 0.5 * weight_cabin
+        seats_width = 0.5 + 0.1 #座椅宽度为0.5m,间距0.1m
+        aisle_width = 0.5 #过道宽度为0.5m
+        scan_range = range(2, 3) #扫描范围从2个座位到6个座位
+        prec = 140
+        for n_seats in scan_range:
+            cabin_width = aisle_width + n_seats * seats_width
+            half_width = 0.5 * cabin_width
+            sym_para = self.origin_para[0]; end_para = self.interp_single_para(half_width)
+            cu_sym, cl_sym = self.cst_rec(sym_para, self.N1, self.N2, prec)
+            cu_end, cl_end = self.cst_rec(end_para, self.N1, self.N2, prec)
+            len_sym = []
+            cu = cu_end.copy().T
+            for j in range(prec):
+                cu[j, 1] = cu_end[1, j] - cl_end[1, j]
+                if cu[j, 1] > 2:
+                    n_scan = int((cu[j, 1] - 2)/0.1) + 1
+                    print(cu[j, 1], n_scan)
+                    k_list = []
+                    for r in range(n_scan):
+                        x_start = cu[j, 0]
+                        psi_sym = (x_start - sym_para[-5])/(sym_para[-4] - sym_para[-5])
+                        zu_sym, zl_sym = self.cst_rec(sym_para, self.N1, self.N2, 2, psi_end=psi_sym)
+                        z_u = cu_end[1, j] - 0.1*r
+                        z_l = z_u - 2.0
+                        if zu_sym[-1, 1] < z_u or zl_sym[-1, 1] > z_l:
+                            break
+                        for k in range(j+1, prec):
+                            if cu_end[1, k] < z_u or cl_end[1, k] > z_l:
+                                k_list.append(cu[k, 0])
+                                break
+                    if len(k_list) > 0:
+                        x_end = max(k_list)
+                        len_sym.append([x_start, x_end, x_end-x_start])
+            len_sym = np.array(len_sym)
+            print(len_sym)
+            print(f"每排{n_seats}座: 客舱宽度为{cabin_width}")
         para = self.interp_para(51)
-        for spara in para:
-            pass
     
 class Aircraft_generator:
     def __init__(self, ) -> None:
@@ -365,9 +398,10 @@ class Aircraft_generator:
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("increase_cabin.csv")
+    air_para.cal_volume()
     # air_para.gene_simple_mesh(41, 60)
-    test_mesh = air_para.gene_panel_mesh()
+    # test_mesh = air_para.gene_panel_mesh()
     # air_para.write_mesh(test_mesh, "test_mesh.x")
-    air_para.write_mesh(test_mesh, "FABOOM_test\\indata\\geo.x")
+    # air_para.write_mesh(test_mesh, "FABOOM_test\\indata\\geo.x")
 
     plt.show()
