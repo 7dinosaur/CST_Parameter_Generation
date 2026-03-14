@@ -22,8 +22,8 @@ def main():
     # ===================== 【你只需要改这3个配置】 =====================
     para_csv = "increase_cabin.csv"
     output_csv = "qualified_solutions.csv"  # 合格结果永久保存
-    LIFT_MIN_THRESHOLD = 1250000.0  # 升力下限（必须修改为你的真实值）
-    perturb_rate = 0.05           # 扰动幅度
+    LIFT_MIN_THRESHOLD = 1170000.0  # 升力下限（必须修改为你的真实值）
+    perturb_rate = 0.03           # 扰动幅度
 
     # ===================== 读取基础参数 =====================
     base_para = pd.read_csv(para_csv).to_numpy()
