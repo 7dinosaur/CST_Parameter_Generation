@@ -7,14 +7,11 @@ from cal_Lift import cal_Lift
     
 def perturb_para(base_para, perturbation=0.05):
     new_para = base_para.copy()
-    total_cols = new_para.shape[1]
-    keep_cols = [0, total_cols-5, total_cols-4]
-    mask = np.ones(total_cols, dtype=bool)
-    mask[keep_cols] = False  # 不动的列设为 False
 
-    params_to_perturb = new_para[:, mask]
-    perturb_factor = 1 + perturbation * (2 * np.random.rand(*params_to_perturb.shape) - 1)
-    new_para[:, mask] = params_to_perturb * perturb_factor
+    cst_cols = slice(1, 19)
+    params_to_perturb = new_para[:, cst_cols]
+    perturb_factor = perturbation * (2 * np.random.rand(*params_to_perturb.shape) - 1)
+    new_para[:, cst_cols] = params_to_perturb + perturb_factor
 
     return new_para
 
@@ -23,7 +20,7 @@ def main():
     para_csv = "increase_cabin.csv"
     output_csv = "qualified_solutions.csv"  # 合格结果永久保存
     LIFT_MIN_THRESHOLD = 1170000.0  # 升力下限（必须修改为你的真实值）
-    perturb_rate = 0.03           # 扰动幅度
+    perturb_rate = 0.01           # 扰动幅度
 
     # ===================== 读取基础参数 =====================
     base_para = pd.read_csv(para_csv).to_numpy()
@@ -50,6 +47,7 @@ def main():
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
             new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+            print("正在计算载客量")
             passenger = new_air.cal_volume()
             Lift = cal_Lift()
 

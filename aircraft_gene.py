@@ -363,6 +363,7 @@ class Aircraft:
         scan_range = range(2, 7) #扫描范围从2个座位到6个座位
         prec = 140
         passengers = []
+        
         for n_seats in scan_range:
             cabin_width = aisle_width + n_seats * seats_width
             half_width = 0.5 * cabin_width
@@ -390,13 +391,16 @@ class Aircraft:
                     if len(k_list) > 0:
                         x_end = max(k_list)
                         len_sym.append([x_start, x_end, x_end-x_start])
-            len_sym = np.array(len_sym)
-            max_len = np.argmax(len_sym[:, 2])
-            max_len = len_sym[max_len][2]
-            n_row = int(max_len/seats_length)
-            # print(max_row)
-            # print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
-            passengers.append(n_row*n_seats)
+            if len(len_sym) > 0:
+                len_sym = np.array(len_sym)
+                max_len = np.argmax(len_sym[:, 2])
+                max_len = len_sym[max_len][2]
+                n_row = int(max_len/seats_length)
+                # print(max_row)
+                # print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
+                passengers.append(n_row*n_seats)
+            else:
+                passengers.append(0)
 
         return max(passengers)
     
