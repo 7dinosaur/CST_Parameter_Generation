@@ -8,18 +8,18 @@ if __name__ == "__main__":
     geo_list = para_list[mask]
     print(geo_list.shape)
     new_solutions = []
-    # for solution in geo_list:
-    #     geo = solution[3:].reshape([-1, 24])
-    #     test_aircraft = Aircraft(geo)
-    #     test_aircraft.write_mesh("panel", "check.x")
+    for solution in geo_list:
+        geo = solution[3:].reshape([-1, 24])
+        test_aircraft = Aircraft(geo)
+        test_aircraft.write_mesh("panel", "check.x")
+        print(f"升力为：{solution[1]}, 载客量为： {solution[2]}")
+        if_pass = input("是否合格：")
 
-    #     if_pass = input("是否合格：")
-
-    #     if if_pass == "1":
-    #         print("合格")
-    #         new_solutions.append(solution)
-    #     else:
-    #         print("不合格")
-    # new_solutions = np.array(new_solutions)
-    # csv_solutions = pd.DataFrame(new_solutions)
-    # csv_solutions.to_csv("filter_solutions.csv", index=False)
+        if if_pass == "1":
+            print("合格")
+            new_solutions.append(solution)
+        else:
+            print("不合格")
+    new_solutions = np.array(new_solutions)
+    csv_solutions = pd.DataFrame(new_solutions)
+    csv_solutions.to_csv("filter_solutions_v2.csv", index=False)
