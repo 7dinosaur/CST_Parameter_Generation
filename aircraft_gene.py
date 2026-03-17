@@ -410,7 +410,7 @@ class Aircraft_generator:
 
 if __name__ == "__main__":
     air_para = Aircraft()
-    air_para.read_from_csv("increase_cabin.csv")
+    air_para.read_from_csv("smooth_test.csv")
     print(air_para.cal_volume())
     air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
     lift = cal_Lift()
