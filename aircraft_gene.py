@@ -150,7 +150,7 @@ class Aircraft:
         order = self.cst_order
 
         ##统一网格尺度设置
-        nose_i, body_i, tail_i = 31, 60, 10
+        nose_i, body_i, tail_i = 29, 60, 10
         nose_j = body_j = tail_j = 10
         wing_i = body_i
         wing_j = 29

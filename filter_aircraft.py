@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
 from aircraft_gene import Aircraft
+from cal_Lift import cal_Lift
 
 if __name__ == "__main__":
-    para_list = pd.read_csv("qualified_solutions.csv").to_numpy()
+    para_list = pd.read_csv("qualified_solutions_v1.csv").to_numpy()
     mask = (para_list[:, 1] < 2000000.0) & (para_list[:, 2] > 120) & (para_list[:, 1] > 1250000.0)
     geo_list = para_list[mask]
     print(geo_list.shape)
@@ -17,6 +18,8 @@ if __name__ == "__main__":
 
         if if_pass == "1":
             print("合格")
+            test_aircraft.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+            print(cal_Lift())
             new_solutions.append(solution)
         else:
             print("不合格")
