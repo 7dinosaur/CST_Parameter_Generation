@@ -20,6 +20,24 @@ def deri_1d(x, y):
 
     return deri
 
+def deri2_1d(x, y):
+    assert len(x) == len(y), "xy应有相同形状"
+    n = len(x)
+    deri2 = np.zeros([n,])
+    
+    for i in range(n):
+        if i == 0:
+            dx = (x[i+3] - x[i])/3
+            deri2[i] = (2*y[i] - 5*y[i+1] + 4*y[i+2] - y[i+3]) / (dx**2)
+        elif i == n-1:
+            dx = (x[i] - x[i-3])/3
+            deri2[i] = (2*y[i] - 5*y[i-1] + 4*y[i-2] - y[i-3]) / (dx**2)
+        else:
+            dx = 0.5*(x[i+1] - x[i-1])
+            deri2[i] = (y[i+1] - 2*y[i] + y[i-1]) / (dx**2)
+    
+    return deri2
+
 class Aircraft:
     def __init__(self, origin_para = np.zeros([2, 2])) -> None:
         self.origin_para:ndarray = origin_para
@@ -406,16 +424,43 @@ class Aircraft:
                 passengers.append(0)
 
         return max(passengers)
-    
-class Aircraft_generator:
-    def __init__(self, ) -> None:
-        pass
+
+    def if_smooth(self, fig = False) -> bool:
+        mesh = self.gene_simple_mesh(41, 31)
+        if fig:
+            plt.figure(figsize=(16, 5))
+        n_turn = 0
+        for i in range(4):
+            line_u = mesh[0, :, i*10]
+            line_l = mesh[1, :, i*10]
+            deri_u = deri_1d(line_u[:, 1], line_u[:, 2])
+            deri_l = deri_1d(line_l[:, 1], line_l[:, 2])
+            deri2_u = deri2_1d(line_u[:, 1], line_u[:, 2])
+            deri2_l = deri2_1d(line_l[:, 1], line_l[:, 2])
+            for i in range(len(deri2_u)-1):
+                if (deri2_u[i] * deri2_u[i+1] < 0):
+                    n_turn += 1
+                if (deri2_l[i] * deri2_l[i+1] < 0):
+                    n_turn += 1
+            if fig:
+                plt.subplot(1, 3, 1)
+                plt.plot(line_u[:, 1], line_u[:, 2])
+                plt.plot(line_l[:, 1], line_l[:, 2])
+                plt.subplot(1, 3, 2)
+                plt.plot(line_u[:, 1], deri_u)
+                plt.plot(line_l[:, 1], deri_l)
+                plt.subplot(1, 3, 3)
+                plt.plot(line_u[:, 1], deri2_u)
+                plt.plot(line_l[:, 1], deri2_l)
+        
+        return (n_turn >= 30)
 
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
+    print(air_para.if_smooth())
     print(air_para.cal_volume())
-    air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
-    lift = cal_Lift()
+    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+    # lift = cal_Lift()
 
     plt.show()
