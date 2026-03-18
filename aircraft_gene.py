@@ -385,7 +385,10 @@ class Aircraft:
                         if zu_sym[-1, 1] < z_u or zl_sym[-1, 1] > z_l:
                             break
                         for k in range(j+1, prec):
-                            if cu_end[1, k] < z_u or cl_end[1, k] > z_l:
+                            x_end = cu[k, 0]
+                            psi_sym = (x_end - sym_para[-5])/(sym_para[-4] - sym_para[-5])
+                            zu_sym, zl_sym = self.cst_rec(sym_para, self.N1, self.N2, 2, psi_end=psi_sym)
+                            if (cu_end[1, k] < z_u or cl_end[1, k] > z_l) or (zu_sym[-1, 1] < z_u or zl_sym[-1, 1] > z_l):
                                 k_list.append(cu[k, 0])
                                 break
                     if len(k_list) > 0:
