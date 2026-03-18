@@ -313,7 +313,7 @@ class Aircraft:
         #===================================#
 
         ## 旋转网格
-        aoa_deg = -3  # 攻角
+        aoa_deg = -3.5  # 攻角
         theta = np.radians(aoa_deg)
         c, s = np.cos(theta), np.sin(theta)
         for i in range(1, 13):

@@ -12,15 +12,16 @@ def perturb_para(base_para, perturbation=0.05):
     params_to_perturb = new_para[:, cst_cols]
     perturb_factor = perturbation * (2 * np.random.rand(*params_to_perturb.shape) - 1)
     new_para[:, cst_cols] = params_to_perturb + perturb_factor
+    new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.2
 
     return new_para
 
 def main():
     para_csv = "smooth_test.csv"
     output_csv = "qualified_solutions.csv"
-    LIFT_MIN_THRESHOLD = 1100000.0  # 升力下限
+    LIFT_MIN_THRESHOLD = 1000000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1800000.0  # 升力上限
-    passenger_min = 100
+    passenger_min = 120
     perturb_rate = 0.02           # 扰动幅度
 
     base_para = pd.read_csv(para_csv).to_numpy()
@@ -44,7 +45,7 @@ def main():
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
             if not new_air.if_smooth():
-                print(f"❌ 几何光顺不合格")
+                # print(f"❌ 几何光顺不合格")
                 continue
             new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x")
             print("正在计算载客量")
