@@ -5,12 +5,12 @@ from aircraft_gene import Aircraft
 from cal_Lift import cal_Lift
 
 if __name__ == "__main__":
-    para_list = pd.read_csv("qualified_solutions_v1.csv").to_numpy()
-    mask = (para_list[:, 1] < 2000000.0) & (para_list[:, 2] > 120) & (para_list[:, 1] > 1250000.0)
+    para_list = pd.read_csv("qualified_solutions.csv").to_numpy()
+    mask = (para_list[:, 1] < 2000000.0) & (para_list[:, 2] > 100) & (para_list[:, 1] > 1250000.0)
     geo_list = para_list[mask]
     print(geo_list.shape)
     new_solutions = []
-    for solution in geo_list:
+    for solution in para_list:
         geo = solution[3:].reshape([-1, 24])
         test_aircraft = Aircraft(geo)
         test_aircraft.if_smooth()

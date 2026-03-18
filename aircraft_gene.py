@@ -168,7 +168,7 @@ class Aircraft:
         order = self.cst_order
 
         ##统一网格尺度设置
-        nose_i, body_i, tail_i = 29, 60, 10
+        nose_i, body_i, tail_i = 31, 60, 10
         nose_j = body_j = tail_j = 10
         wing_i = body_i
         wing_j = 29
@@ -283,35 +283,16 @@ class Aircraft:
         x_begin = x_end
         x_end = this_para[0, -4]
         x_list = np.linspace(x_begin, x_end, tail_i)
-        test = trailing_edge_x
-        for i, t in enumerate(test):
-            if test[i+1] > test[i]:
-                # print(i)
-                break
-        trailing_edge_x = test[:i]; trailing_edge_y = this_para[:, 0][:i]
-        f_trailing_xy = si.interp1d(trailing_edge_x, trailing_edge_y, kind='quadratic')
-        for i, x in enumerate(x_list[:-1]):
-            this_y_end = f_trailing_xy(x)
-            this_line = self.interp_single_para(this_y_end)
-            mask = this_para[:, 0] < this_y_end - 0.1*delta_y
-            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
-            tmp_para = np.append(tmp_para, this_line.reshape([1, -1]), axis=0)
-            coords_this = np.zeros([tmp_para.shape[0], 4])
-            coords_this[:, 0] = x
-            coords_this[:, 1] = tmp_para[:, 0]
-            for idx, da in enumerate(tmp_para):
-                psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
-                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
-                coords_this[idx, 2] = z_u[1, -1]
-                coords_this[idx, 3] = z_l[1, -1]
-            new_coords = np.ones([tail_j, 3]) * x
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], tail_j)
-            dom9[i] = new_coords
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], tail_j)
-            dom10[i] = new_coords
-        dom10 = dom10[:, ::-1]
-        end_z = this_para[0, -3] + (this_para[0, -4] - this_para[0, -5])*this_para[0, -1]
-        dom9[-1, :] = dom10[-1, :] = np.array([this_para[0, -4], this_para[0, 0], end_z])
+        end_point, _ = self.cst_rec(this_para[0, :], self.N1, self.N2, 2)
+        end_point = np.array([x_end, this_para[0, 0], end_point[-1, 1]])
+        for j in range(tail_j):
+            begin_point_up = dom3[-1, j]
+            begin_point_low = dom4[-1, j]
+            for i, x in enumerate(x_list):
+                x_psi = (x - x_begin)/(x_end - x_begin)
+                dom9[i, j, 0] = dom10[i, j, 0] = x
+                dom9[i, j, 1:] = begin_point_up[1:] + x_psi*(end_point[1:] - begin_point_up[1:])
+                dom10[i, j, 1:] = begin_point_low[1:] + x_psi*(end_point[1:] - begin_point_low[1:])
         #===================================#
 
         ##钝底网格...呃...赋值
@@ -330,6 +311,24 @@ class Aircraft:
         dom12[-1, 0, [1, 2]] = dom9[-1, 1, [1, 2]]
         dom12[-1, :, 0] = 100
         #===================================#
+
+        ## 旋转网格
+        aoa_deg = -3  # 攻角
+        theta = np.radians(aoa_deg)
+        c, s = np.cos(theta), np.sin(theta)
+        for i in range(1, 13):
+            # 构造变量名 dom1, dom2...dom12
+            dom_name = f"dom{i}"
+            if dom_name in locals():
+                # 取出网格
+                mesh = locals()[dom_name]
+                
+                x = mesh[..., 0]
+                z = mesh[..., 2]
+                mesh[..., 0] = x * c - z * s
+                mesh[..., 2] = x * s + z * c
+
+        print(f"攻角为{-aoa_deg}")
         
         panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)] ##由于分块网格长度尺度不统一用列表存储
         panel_mesh.pop(-2)
@@ -430,6 +429,7 @@ class Aircraft:
         if fig:
             plt.figure(figsize=(16, 5))
         n_turn = 0
+        max_deri1 = 0
         for i in range(4):
             line_u = mesh[0, :, i*10]
             line_l = mesh[1, :, i*10]
@@ -442,6 +442,7 @@ class Aircraft:
                     n_turn += 1
                 if (deri2_l[i] * deri2_l[i+1] < 0):
                     n_turn += 1
+                max_deri1 = max([max_deri1, abs(deri_u[i]), abs(deri_l[i])])
             if fig:
                 plt.subplot(1, 3, 1)
                 plt.plot(line_u[:, 1], line_u[:, 2])
@@ -453,14 +454,14 @@ class Aircraft:
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
         
-        return (n_turn >= 30)
+        return (n_turn <= 30) and (max_deri1 < 0.5)
 
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    print(air_para.if_smooth())
+    print(air_para.if_smooth(fig=True))
     print(air_para.cal_volume())
-    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
-    # lift = cal_Lift()
+    air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+    lift = cal_Lift()
 
     plt.show()
