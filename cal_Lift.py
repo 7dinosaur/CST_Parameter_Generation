@@ -30,6 +30,33 @@ def cal_Lift() -> bool | float:
     except Exception as e:
         print(f"错误: {str(e)}")
         return False
+
+def cal_PLdB() -> bool | float:
+    base_dir = os.path.join(os.path.dirname(__file__), "FABOOM_test\\bboom")
+    exe_path = r"FABOOM\\bboom\\bBoom.exe"
+    
+    try:
+        # 调用BBOOM程序
+        process = subprocess.run(
+            [exe_path],
+            cwd=base_dir,
+            check=True,
+            # stdout=subprocess.PIPE,
+            # stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # 验证程序执行结果
+        if process.returncode != 0:
+            raise RuntimeError(f"程序执行失败: {process.stderr}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"子进程错误: {str(e)}")
+    except FileNotFoundError as e:
+        print(f"文件错误: {str(e)}")
+    except Exception as e:
+        print(f"未知错误: {str(e)}")
+    return None
     
 if __name__ == "__main__":
     cal_Lift()

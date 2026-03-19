@@ -28,4 +28,4 @@ if __name__ == "__main__":
             print("不合格")
     new_solutions = np.array(new_solutions)
     csv_solutions = pd.DataFrame(new_solutions)
-    csv_solutions.to_csv("filter_solutions_v2.csv", index=False)
+    csv_solutions.to_csv("filter_solutions_v3.csv", index=False)

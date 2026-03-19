@@ -454,7 +454,7 @@ class Aircraft:
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
         
-        return (n_turn <= 30) and (max_deri1 < 0.5)
+        return (n_turn <= 25) and (max_deri1 < 0.5)
 
 if __name__ == "__main__":
     air_para = Aircraft()
