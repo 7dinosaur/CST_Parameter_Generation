@@ -13,7 +13,7 @@ def cal_Lift() -> bool | float:
         result = subprocess.run([exe_path], cwd=base_dir, check=True, text=True, 
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        ##错误判断，貌似没用，不过还是留着吧
+        ## 错误判断，貌似没用，不过还是留着吧
         #===============================================================#
         output = result.stdout + result.stderr
         fail_keywords = ["forrt", "error", "Unknown"]
@@ -31,32 +31,23 @@ def cal_Lift() -> bool | float:
         print(f"错误: {str(e)}")
         return False
 
-def cal_PLdB() -> bool | float:
+def cal_PLdB() -> float:
     base_dir = os.path.join(os.path.dirname(__file__), "FABOOM_test\\bboom")
-    exe_path = r"FABOOM\\bboom\\bBoom.exe"
+    exe_path = os.path.join(base_dir, r"bBoom.exe") #拼接程序执行路径
+    result_path = os.path.join(base_dir, r"OUTDATA\\Burgers_NOISE.DAT")
     
     try:
-        # 调用BBOOM程序
-        process = subprocess.run(
-            [exe_path],
-            cwd=base_dir,
-            check=True,
-            # stdout=subprocess.PIPE,
-            # stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # 验证程序执行结果
-        if process.returncode != 0:
-            raise RuntimeError(f"程序执行失败: {process.stderr}")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"子进程错误: {str(e)}")
-    except FileNotFoundError as e:
-        print(f"文件错误: {str(e)}")
+        # 调用bBoom程序
+        print("正在执行声爆传播计算")
+        result = subprocess.run([exe_path], cwd=base_dir, check=True, text=True, 
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        val = float([*open(result_path)][3].split()[2])
+        return val
+    
     except Exception as e:
-        print(f"未知错误: {str(e)}")
-    return None
+        print(f"错误: {str(e)}")
+        return -1.0
     
 if __name__ == "__main__":
-    cal_Lift()
+    # cal_Lift()
+    print(cal_PLdB())

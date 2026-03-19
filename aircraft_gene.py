@@ -62,11 +62,8 @@ class Aircraft:
 
         for j in range(self.origin_para.shape[1]-1):
             full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
-            
-            if j == ori_para.shape[1]-5: #后缘保持一阶连续
-                f = si.interp1d(full_y_list, full_mesh_para, kind='linear')
-            else:
-                f = si.interp1d(full_y_list, full_mesh_para, kind='quadratic')
+            kind = 'linear' if j == ori_para.shape[1]-5 else 'quadratic'
+            f = si.interp1d(full_y_list, full_mesh_para, kind=kind)
             para = f(full_y).reshape([-1,1])
             full_para = np.append(full_para, para, axis=1)
         # self.interped_para = full_para
@@ -81,11 +78,8 @@ class Aircraft:
 
         for j in range(self.origin_para.shape[1]-1):
             full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
-            
-            if j == ori_para.shape[1]-5: #后缘保持一阶连续
-                f = si.interp1d(full_y_list, full_mesh_para, kind='linear')
-            else:
-                f = si.interp1d(full_y_list, full_mesh_para, kind='quadratic')
+            kind = 'linear' if j == ori_para.shape[1]-5 else 'quadratic' ## 后缘保持一阶
+            f = si.interp1d(full_y_list, full_mesh_para, kind=kind)
             para = f(y)
             full_para[j+1] = para
 
@@ -137,7 +131,7 @@ class Aircraft:
 
         return mesh
     
-    def gene_panel_mesh(self) -> list[ndarray]:
+    def gene_panel_mesh(self, aoa:float = 3.0) -> list[ndarray]:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """panel_mesh是可以直接输入faboom程序计算的分块网格"""
         def redistribution(x, y, n):
@@ -313,25 +307,16 @@ class Aircraft:
         #===================================#
 
         ## 旋转网格
-        aoa_deg = -3.5  # 攻角
-        theta = np.radians(aoa_deg)
+        theta = np.radians(-aoa)
         c, s = np.cos(theta), np.sin(theta)
-        for i in range(1, 13):
-            # 构造变量名 dom1, dom2...dom12
-            dom_name = f"dom{i}"
+        for dom_name in [f"dom{i}" for i in range(1, 13)]:
             if dom_name in locals():
-                # 取出网格
                 mesh = locals()[dom_name]
-                
-                x = mesh[..., 0]
-                z = mesh[..., 2]
-                mesh[..., 0] = x * c - z * s
-                mesh[..., 2] = x * s + z * c
-
-        print(f"攻角为{-aoa_deg}")
+                x, z = mesh[..., 0], mesh[..., 2]
+                mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
+        print(f"攻角为{aoa}")
         
-        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)] ##由于分块网格长度尺度不统一用列表存储
-        panel_mesh.pop(-2)
+        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13) if i != 11] ##由于分块网格长度尺度不统一用列表存储
 
         return panel_mesh
     
