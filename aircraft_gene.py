@@ -410,12 +410,13 @@ class Aircraft:
         return max(passengers)
 
     def if_smooth(self, fig = False) -> bool:
-        mesh = self.gene_simple_mesh(41, 31)
+        mesh = self.gene_simple_mesh(41, 36)
         if fig:
-            plt.figure(figsize=(16, 5))
+            plt.figure(figsize=(16, 4))
         n_turn = 0
         max_deri1 = 0
-        for i in range(4):
+        for i in range(1):
+            i += 1
             line_u = mesh[0, :, i*10]
             line_l = mesh[1, :, i*10]
             deri_u = deri_1d(line_u[:, 1], line_u[:, 2])
@@ -447,6 +448,6 @@ if __name__ == "__main__":
     print(air_para.if_smooth(fig=True))
     print(air_para.cal_volume())
     air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
-    lift = cal_Lift()
+    # lift = cal_Lift()
 
     plt.show()

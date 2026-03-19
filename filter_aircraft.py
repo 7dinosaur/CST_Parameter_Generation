@@ -5,7 +5,7 @@ from aircraft_gene import Aircraft
 from cal_Lift import cal_Lift
 
 if __name__ == "__main__":
-    para_list = pd.read_csv("qualified_solutions.csv").to_numpy()
+    para_list = pd.read_csv("qualified_solutions_1.csv").to_numpy()
     mask = (para_list[:, 1] < 2000000.0) & (para_list[:, 2] > 100) & (para_list[:, 1] > 1250000.0)
     geo_list = para_list[mask]
     print(geo_list.shape)

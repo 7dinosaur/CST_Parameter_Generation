@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from numpy import ndarray
+from aircraft_gene import Aircraft
 
 def SVD(X:ndarray, k):
     # 展平
@@ -23,7 +24,7 @@ def SVD(X:ndarray, k):
 
     error = np.mean((X - X_recon) ** 2)
     print(error)
-    return X_reduced, Vt_k, mean
+    return X_reduced, Vt_k, mean, var_min, var_max
 
 def SVD_recon(var, Vt_k, mean):
     X_recon_centered = var @ Vt_k  # 回到 192 维，但中心化
@@ -33,8 +34,12 @@ def SVD_recon(var, Vt_k, mean):
 if __name__ == "__main__":
     data_path = "filter_solutions_v3.csv"
     data = pd.read_csv(data_path).to_numpy()[:, 3:] # 每行代表一个样本的飞机参数, 如(14,192)代表14个样本
-    k = 3
-    X_reduced, Vt_k, mean = SVD(data, k)
+    k = 2
+    X_reduced, Vt_k, mean, var_min, var_max = SVD(data, k)
     var_test = X_reduced[0]
     recon_sample = SVD_recon(var_test, Vt_k, mean)
-    print((recon_sample - data[0]).max())
+    new_var = var_min + np.random.rand(k) * (var_max - var_min)
+    recon_sample = SVD_recon(new_var, Vt_k, mean)
+    para = recon_sample.reshape(-1, 24)
+    test_air = Aircraft(para)
+    test_air.write_mesh("panel", "check.x", 0)
