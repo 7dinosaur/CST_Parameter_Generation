@@ -19,7 +19,7 @@ def perturb_para(base_para, perturbation=0.05):
 def main():
     para_csv = "smooth_test.csv"
     output_csv = "qualified_solutions_1.csv"
-    LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
+    LIFT_MIN_THRESHOLD = 1100000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1800000.0  # 升力上限
     passenger_min = 120
     perturb_rate = 0.02           # 扰动幅度
@@ -47,7 +47,7 @@ def main():
             if not new_air.if_smooth():
                 # print(f"❌ 几何光顺不合格")
                 continue
-            new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+            new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=3.6)
             print("正在计算载客量")
             passenger = new_air.cal_volume()
             # 载客量判断

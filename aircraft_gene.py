@@ -320,7 +320,7 @@ class Aircraft:
 
         return panel_mesh
     
-    def write_mesh(self, mesh_type:str = "panel", file_path:str = "geo.x") -> None:
+    def write_mesh(self, mesh_type:str = "panel", file_path:str = "geo.x", aoa = 3.0) -> None:
         """自动识别网格类型并写入文件"""
         with open(file_path, 'w') as f:
             if mesh_type == "simple": #simple mesh
@@ -339,7 +339,7 @@ class Aircraft:
                 print(f"写入完毕,网格形状为[{n_i},{n_j}]. 网格文件路径：{file_path}")
 
             elif mesh_type == "panel": #panel mesh
-                mesh = self.gene_panel_mesh()
+                mesh = self.gene_panel_mesh(aoa)
                 print("写入面元网格...")
                 f.write(f"{len(mesh)}\n")
                 for dom in mesh:
@@ -439,7 +439,7 @@ class Aircraft:
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
         
-        return (n_turn <= 25) and (max_deri1 < 0.5)
+        return (n_turn <= 30) and (max_deri1 < 0.5)
 
 if __name__ == "__main__":
     air_para = Aircraft()
