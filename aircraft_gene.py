@@ -409,6 +409,7 @@ class Aircraft:
 
         return max(passengers)
 
+    ## 计算二阶导数作几何约束
     def if_smooth(self, fig = False) -> bool:
         mesh = self.gene_simple_mesh(41, 36)
         if fig:
@@ -441,13 +442,39 @@ class Aircraft:
                 plt.plot(line_l[:, 1], deri2_l)
         
         return (n_turn <= 30) and (max_deri1 < 0.5)
+    
+    ##拉普拉斯能量
+    def Laplace(self) -> bool:
+        span, chord = 101, 81
+        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
+        laplace_u, laplace_l = np.zeros_like(mesh_u), np.zeros_like(mesh_l)
+        for i in range(span):
+            for j in range(chord):
+                N_set = []
+                if i != 0 and i != span-1:
+                    N_set.append((i-1, j))
+                    N_set.append((i+1, j))
+                if j != 0 and j != chord-1:
+                    N_set.append((i, j-1))
+                    N_set.append((i, j+1))
+                if N_set:
+                    center_point_u = np.array([mesh_u[idx] for idx in N_set]).mean(axis=0)
+                    center_point_l = np.array([mesh_l[idx] for idx in N_set]).mean(axis=0)
+                    laplace_u[i, j] = mesh_u[i, j] - center_point_u
+                    laplace_l[i, j] = mesh_l[i, j] - center_point_l
+        laplace_norm_u = np.sum(laplace_u ** 2, axis=2).sum()
+        laplace_norm_l = np.sum(laplace_l ** 2, axis=2).sum()
+        laplace_norm = laplace_norm_u + laplace_norm_l
+        print(laplace_norm)
+
+        return laplace_norm < 0.81
 
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    print(air_para.if_smooth(fig=True))
+    print(air_para.Laplace())
     print(air_para.cal_volume())
     air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
     # lift = cal_Lift()
 
-    plt.show()
+    # plt.show()

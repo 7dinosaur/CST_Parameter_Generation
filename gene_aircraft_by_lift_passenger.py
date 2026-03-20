@@ -44,7 +44,7 @@ def main():
 
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
-            if not new_air.if_smooth():
+            if not new_air.Laplace():
                 # print(f"❌ 几何光顺不合格")
                 continue
             new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=3.6)
