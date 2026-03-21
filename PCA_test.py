@@ -60,8 +60,7 @@ class aircraft_para:
         test_Z = np.random.uniform(Z_min, Z_max).reshape(1, -1)
 
         weights = test_Z @ alpha.T  # (1, n_sample)
-        X_recon = mean + weights @ X_center  # ✅ 正确！
-        # X_recon = mean + np.dot(test_Z, alpha.T @ X_center) / np.sum(test_Z @ alpha.T)
+        X_recon = mean + weights @ X_center
         
         X_recon = X_recon.reshape(-1, 24)  # 改成你的网格形状
 
