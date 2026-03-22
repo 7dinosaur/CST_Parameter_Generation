@@ -1,6 +1,7 @@
 import os
 import subprocess
 import numpy as np
+import shutil
 
 def cal_Lift() -> bool | float:
     base_dir = os.path.join(os.path.dirname(__file__), "FABOOM_test")
@@ -32,6 +33,7 @@ def cal_Lift() -> bool | float:
         return False
 
 def cal_PLdB() -> float:
+    shutil.copy2("FABOOM_test\\outdata\\nearfield.dat", "FABOOM_test\\bboom\\INDATA\\near_field_pressure.dat")
     base_dir = os.path.join(os.path.dirname(__file__), "FABOOM_test\\bboom")
     exe_path = os.path.join(base_dir, r"bBoom.exe") #拼接程序执行路径
     result_path = os.path.join(base_dir, r"OUTDATA\\Burgers_NOISE.DAT")

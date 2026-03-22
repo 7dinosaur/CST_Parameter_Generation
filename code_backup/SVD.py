@@ -35,9 +35,9 @@ def SVD_recon(var, Vt_k, mean):
     return X_recon
 
 if __name__ == "__main__":
-    data_path = "filter_solutions_v1_set.csv"
+    data_path = "qualified_solutions_1.csv"
     data = pd.read_csv(data_path).to_numpy()[:, 3:] # 每行代表一个样本的飞机参数, 如(14,192)代表14个样本
-    k = 5
+    k = 3
     X_reduced, Vt_k, mean, var_min, var_max = SVD(data, k)
     var_test = X_reduced[0]
     recon_sample = SVD_recon(var_test, Vt_k, mean)

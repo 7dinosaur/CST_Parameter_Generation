@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+import test
 from aircraft_gene import Aircraft
 
 class aircraft_para:
@@ -58,6 +59,7 @@ class aircraft_para:
         Z_min = np.min(Z_all, axis=0)
         Z_max = np.max(Z_all, axis=0)
         test_Z = np.random.uniform(Z_min, Z_max).reshape(1, -1)
+        print(X_center.shape)
 
         weights = test_Z @ alpha.T  # (1, n_sample)
         X_recon = mean + weights @ X_center
@@ -67,11 +69,19 @@ class aircraft_para:
         air_test = Aircraft(X_recon)
         air_test.write_mesh("panel", 'kernel_pca_test.x')
         print("Kernel PCA 生成完成！shape =", X_recon.shape)
+        PCA_dict = {}
+        PCA_dict["alpha"] = alpha
+        PCA_dict["X_center"] = X_center
+        PCA_dict["mean"] = mean
+        PCA_dict["Z_min"] = Z_min
+        PCA_dict["Z_max"] = Z_max
+        np.savez("PCA_dict.npz", **PCA_dict)
 
 if __name__ == "__main__":
-    data_path = "qualified_solutions_1_set.csv"
+    data_path = "qualified_solutions_1.csv"
     data = pd.read_csv(data_path).to_numpy()[:, 3:]
     para = aircraft_para(data)
-    k = 5
+    k = 10
+    test_x = np.random.rand
     para.kernel_PCA(k)
     plt.show()
