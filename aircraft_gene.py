@@ -5,10 +5,8 @@ from numpy import ndarray
 import scipy.interpolate as si
 from scipy.special import comb
 from matplotlib import pyplot as plt
-from sympy import im
 from cal_Lift import cal_Lift
 import time
-from scipy.ndimage import convolve
 
 def deri_1d(x, y):
     assert len(x) == len(y), "xy应有相同形状"
