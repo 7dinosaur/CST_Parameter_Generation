@@ -5,7 +5,10 @@ from numpy import ndarray
 import scipy.interpolate as si
 from scipy.special import comb
 from matplotlib import pyplot as plt
+from sympy import im
 from cal_Lift import cal_Lift
+import time
+from scipy.ndimage import convolve
 
 def deri_1d(x, y):
     assert len(x) == len(y), "xy应有相同形状"
@@ -363,8 +366,9 @@ class Aircraft:
         seats_length = 0.97 #座椅前后长度
         aisle_width = 0.5 #过道宽度为0.5m
         scan_range = range(2, 7) #扫描范围从2个座位到6个座位
-        prec = 140
+        prec = 100
         passengers = []
+        z_step = 0.2 #垂向扫描步长
         
         for n_seats in scan_range:
             cabin_width = aisle_width + n_seats * seats_width
@@ -376,13 +380,13 @@ class Aircraft:
             for j in range(prec):
                 cu[j, 1] = cu_end[1, j] - cl_end[1, j]
                 if cu[j, 1] > height_cabin:
-                    n_scan = int((cu[j, 1] - height_cabin)/0.1) + 1
+                    n_scan = int((cu[j, 1] - height_cabin)/z_step) + 1
                     k_list = []
                     for r in range(n_scan):
                         x_start = cu[j, 0]
                         psi_sym = (x_start - sym_para[-5])/(sym_para[-4] - sym_para[-5])
                         zu_sym, zl_sym = self.cst_rec(sym_para, self.N1, self.N2, 2, psi_end=psi_sym)
-                        z_u = cu_end[1, j] - 0.1*r
+                        z_u = cu_end[1, j] - z_step*r
                         z_l = z_u - height_cabin
                         if zu_sym[-1, 1] < z_u or zl_sym[-1, 1] > z_l:
                             break
@@ -408,43 +412,9 @@ class Aircraft:
                 passengers.append(0)
 
         return max(passengers)
-
-    ## 计算二阶导数作几何约束
-    def if_smooth(self, fig = False) -> bool:
-        mesh = self.gene_simple_mesh(41, 36)
-        if fig:
-            plt.figure(figsize=(16, 4))
-        n_turn = 0
-        max_deri1 = 0
-        for i in range(1):
-            i += 1
-            line_u = mesh[0, :, i*10]
-            line_l = mesh[1, :, i*10]
-            deri_u = deri_1d(line_u[:, 1], line_u[:, 2])
-            deri_l = deri_1d(line_l[:, 1], line_l[:, 2])
-            deri2_u = deri2_1d(line_u[:, 1], line_u[:, 2])
-            deri2_l = deri2_1d(line_l[:, 1], line_l[:, 2])
-            for i in range(len(deri2_u)-1):
-                if (deri2_u[i] * deri2_u[i+1] < 0):
-                    n_turn += 1
-                if (deri2_l[i] * deri2_l[i+1] < 0):
-                    n_turn += 1
-                max_deri1 = max([max_deri1, abs(deri_u[i]), abs(deri_l[i])])
-            if fig:
-                plt.subplot(1, 3, 1)
-                plt.plot(line_u[:, 1], line_u[:, 2])
-                plt.plot(line_l[:, 1], line_l[:, 2])
-                plt.subplot(1, 3, 2)
-                plt.plot(line_u[:, 1], deri_u)
-                plt.plot(line_l[:, 1], deri_l)
-                plt.subplot(1, 3, 3)
-                plt.plot(line_u[:, 1], deri2_u)
-                plt.plot(line_l[:, 1], deri2_l)
-        
-        return (n_turn <= 30) and (max_deri1 < 0.5)
     
     ##拉普拉斯能量
-    def Laplace(self) -> bool:
+    def old_Laplace(self) -> float:
         span, chord = 101, 81
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
         laplace_u, laplace_l = np.zeros_like(mesh_u), np.zeros_like(mesh_l)
@@ -465,16 +435,73 @@ class Aircraft:
         laplace_norm_u = np.sum(laplace_u ** 2, axis=2).sum()
         laplace_norm_l = np.sum(laplace_l ** 2, axis=2).sum()
         laplace_norm = laplace_norm_u + laplace_norm_l
-        print(laplace_norm)
+        # print(laplace_norm)
 
         return laplace_norm
+
+    def Laplace(self) -> float:
+        span, chord = 101, 81
+        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
+
+        laplace_u = np.zeros_like(mesh_u)
+        laplace_l = np.zeros_like(mesh_l)
+
+        # ===== 中间区域 (有上下左右四个邻居) =====
+        center_u = (
+            mesh_u[:-2, 1:-1] + mesh_u[2:, 1:-1] +
+            mesh_u[1:-1, :-2] + mesh_u[1:-1, 2:]
+        ) / 4.0
+
+        center_l = (
+            mesh_l[:-2, 1:-1] + mesh_l[2:, 1:-1] +
+            mesh_l[1:-1, :-2] + mesh_l[1:-1, 2:]
+        ) / 4.0
+
+        laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
+        laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
+
+        # ===== 边界处理 =====
+        # 上下边（不含角）
+        center_u = (
+            mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
+        ) / 2.0
+        laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
+
+        center_l = (
+            mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
+        ) / 2.0
+        laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
+
+        # 左右边（不含角）
+        center_u = (
+            mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
+        ) / 2.0
+        laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
+
+        center_l = (
+            mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
+        ) / 2.0
+        laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
+
+        # ===== 计算范数 =====
+        laplace_norm_u = np.sum(laplace_u ** 2)
+        laplace_norm_l = np.sum(laplace_l ** 2)
+
+        return laplace_norm_u + laplace_norm_l
 
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    print(air_para.Laplace())
-    print(air_para.cal_volume())
-    air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+    # print(air_para.Laplace())
+    # print(air_para.cal_volume())
+    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
     # lift = cal_Lift()
+    para_list = pd.read_csv("new_samples_based_opt1.csv").to_numpy()
+    # for p in para_list:
+    #     pa = p[3:].reshape([-1, 24])
+    #     air = Aircraft(pa)
+    #     v1 = air.old_volume()
+    #     v2 = air.cal_volume()
+    #     print(f"旧方法: {v1}, 新方法: {v2}")
 
     # plt.show()

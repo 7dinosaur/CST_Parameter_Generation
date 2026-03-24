@@ -7,6 +7,8 @@ def run_task(interp_id):
     base_path = f"MPI_FABOOM\\FABOOM_0{interp_id}"
     result = cal_Lift(base_path)
 
+    return result
+
 if __name__ == "__main__":
     task_list = [1, 2, 3, 4]  # 任务列表
     start = time.time()
