@@ -11,18 +11,24 @@ def perturb_para(base_para, perturbation=0.05):
     cst_cols = slice(1, 19)
     params_to_perturb = new_para[:, cst_cols]
     perturb_factor = perturbation * (2 * np.random.rand(*params_to_perturb.shape) - 1)
+    ## 对CST参数进行扰动
     new_para[:, cst_cols] = params_to_perturb + perturb_factor
+    ## 对剖面Z方向偏移进行扰动
     new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.2
+    ## 对剖面的后缘z方向偏移进行扰动
+    # new_para[:, -2:] = new_para[:, -2:] + (np.random.rand(*new_para[:, -2:].shape) - 0.5) * 0.2
+    ## 对剖面x方向偏移进行扰动
+    new_para[:, -5:-3] = new_para[:, -5:-3] + (np.random.rand(*new_para[:, -5:-3].shape) - 0.5) * 0.2
 
     return new_para
 
 def main():
-    para_csv = "smooth_test.csv"
-    output_csv = "qualified_solutions_1.csv"
-    LIFT_MIN_THRESHOLD = 1100000.0  # 升力下限
-    LIFT_MAX_THRESHOLD = 1800000.0  # 升力上限
+    para_csv = "opt1_99.4_144.csv"
+    output_csv = "new_samples_based_opt1.csv"
+    LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
+    LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 120
-    perturb_rate = 0.02           # 扰动幅度
+    perturb_rate = 0.03           # 扰动幅度
 
     base_para = pd.read_csv(para_csv).to_numpy()
     param_count = len(base_para.flatten())  # 自动计算参数数量
@@ -34,6 +40,9 @@ def main():
 
     iteration = 0
 
+    base_air = Aircraft(base_para)
+    base_laplace = base_air.Laplace()
+
     while True:
         iteration += 1
         print(f"\n----- 第 {iteration} 次生成 -----")
@@ -44,16 +53,16 @@ def main():
 
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
-            if not new_air.Laplace():
+            if new_air.Laplace() > base_laplace * 1.05:  # 几何光顺性判断（阈值可调整）
                 # print(f"❌ 几何光顺不合格")
                 continue
-            new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=3.6)
             print("正在计算载客量")
             passenger = new_air.cal_volume()
             # 载客量判断
             if passenger < passenger_min:
                 print(f"❌ 不合格 | 载客量 {passenger}")
                 continue
+            new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=4.0)
             Lift = cal_Lift()
 
             # 升力判断

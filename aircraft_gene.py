@@ -467,7 +467,7 @@ class Aircraft:
         laplace_norm = laplace_norm_u + laplace_norm_l
         print(laplace_norm)
 
-        return laplace_norm < 0.81
+        return laplace_norm
 
 if __name__ == "__main__":
     air_para = Aircraft()

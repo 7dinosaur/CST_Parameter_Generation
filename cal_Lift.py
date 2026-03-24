@@ -3,22 +3,24 @@ import subprocess
 import numpy as np
 import shutil
 
-def cal_Lift() -> bool | float:
-    base_dir = os.path.join(os.path.dirname(__file__), "FABOOM_test")
+def cal_Lift(base_path : str = "FABOOM_test") -> bool | float:
+    base_dir = os.path.join(os.path.dirname(__file__), base_path)
     exe_path = os.path.join(base_dir, r"FABOOM.exe") #拼接程序执行路径
     result_path = os.path.join(base_dir, r"A502\\Lift distribution.dat")
     
     try:
-        # 调用FABOOM程序
-        print("正在执行气动计算")
-        result = subprocess.run([exe_path], cwd=base_dir, check=True, text=True, 
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        ## 错误判断，貌似没用，不过还是留着吧
-        #===============================================================#
-        output = result.stdout + result.stderr
+        # 异步执行FABOOM程序
+        print(f"正在执行气动计算，目录：{base_dir}")
+        process = subprocess.Popen([exe_path], cwd=base_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # 等待外部程序执行完成并获取结果
+        stdout, stderr = process.communicate()
+
+        # 错误判断
         fail_keywords = ["forrt", "error", "Unknown"]
+        output = stdout + stderr
         calc_success = not any(key in output for key in fail_keywords)
+        
         if calc_success:
             lift = np.loadtxt(result_path)
             print(lift[-1, 1])
@@ -26,8 +28,7 @@ def cal_Lift() -> bool | float:
         else:
             print(output)
             return False
-        #===============================================================#
-        
+
     except Exception as e:
         print(f"错误: {str(e)}")
         return False
