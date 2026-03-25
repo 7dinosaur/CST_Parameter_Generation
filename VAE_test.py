@@ -128,11 +128,11 @@ class AircraftVAE:
 # ==============================================
 if __name__ == "__main__":
     # 1. 读取数据
-    data_path = "qualified_solutions_1.csv"
+    data_path = "514_base_opt1.csv"
     data = pd.read_csv(data_path).to_numpy()[:, 3:]
 
     # 2. 创建VAE对象（10维隐空间）
-    vae = AircraftVAE(latent_dim=10)
+    vae = AircraftVAE(latent_dim=15)
 
     # 3. 训练并保存模型（只需要运行一次！）
     vae.train_and_save(data, epochs=800)
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     # vae.load_model()
 
     # 5. 输入：10个 0~1 的随机数
-    z_random = np.random.rand(10)
+    z_random = -1.0 + 2 * np.random.rand(15)
     print("输入VAE的10个随机数：\n", np.round(z_random, 3))
 
     # 6. 解码 → 输出飞行器设计参数

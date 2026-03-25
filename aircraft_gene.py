@@ -437,7 +437,7 @@ class Aircraft:
 
         return laplace_norm
 
-    def Laplace(self) -> float:
+    def Laplace(self) -> tuple[float, float]:
         span, chord = 101, 81
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
 
@@ -485,21 +485,14 @@ class Aircraft:
         laplace_norm_u = np.sum(laplace_u ** 2)
         laplace_norm_l = np.sum(laplace_l ** 2)
 
-        return laplace_norm_u + laplace_norm_l
+        return laplace_norm_u, laplace_norm_l
 
 if __name__ == "__main__":
     air_para = Aircraft()
-    air_para.read_from_csv("smooth_test.csv")
-    # print(air_para.Laplace())
-    # print(air_para.cal_volume())
-    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
-    # lift = cal_Lift()
-    para_list = pd.read_csv("new_samples_based_opt1.csv").to_numpy()
-    # for p in para_list:
-    #     pa = p[3:].reshape([-1, 24])
-    #     air = Aircraft(pa)
-    #     v1 = air.old_volume()
-    #     v2 = air.cal_volume()
-    #     print(f"旧方法: {v1}, 新方法: {v2}")
+    air_para.read_from_csv("opt1_99.4_144.csv")
+    print(air_para.Laplace())
+    print(air_para.cal_volume())
+    air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+    lift = cal_Lift()
 
     # plt.show()
