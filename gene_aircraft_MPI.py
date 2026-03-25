@@ -21,7 +21,7 @@ LIFT_MIN = 1200000.0
 LIFT_MAX = 1500000.0
 PASSENGER_MIN = 120
 PERTURB_RATE = 0.03
-GEOMETRY_FACTOR = 1.05
+GEOMETRY_FACTOR = 1.0
 
 BATCH_SIZE = 4  # 每4个一组并行气动计算
 
@@ -57,11 +57,11 @@ def generate_one_candidate(base_para, base_laplace):
         new_para = perturb_para(base_para, PERTURB_RATE)
         air = Aircraft(new_para)
         laplace = air.Laplace()
-        if laplace[0] > base_laplace[0] or laplace[1] > base_laplace[1] * GEOMETRY_FACTOR:
+        if laplace[0] > base_laplace[0] * GEOMETRY_FACTOR or laplace[1] > base_laplace[1] * GEOMETRY_FACTOR:
             continue
         passenger = air.cal_volume()
         if passenger >= PASSENGER_MIN:
-            return new_para, passenger
+            return new_para, passenger, laplace
 
 def parallel_calc_lift(sample_list, dir_list):
     """并行气动计算（修复版）"""

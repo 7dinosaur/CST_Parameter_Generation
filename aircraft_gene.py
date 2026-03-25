@@ -438,7 +438,7 @@ class Aircraft:
         return laplace_norm
 
     def Laplace(self) -> list[float]:
-        span, chord = 41, 41
+        span, chord = 31, 61
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
 
         laplace_u = np.zeros_like(mesh_u)
@@ -460,26 +460,26 @@ class Aircraft:
 
         # ===== 边界处理 =====
         # 上下边（不含角）
-        # center_u = (
-        #     mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
-        # ) / 2.0
-        # laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
+        center_u = (
+            mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
+        ) / 2.0
+        laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
 
-        # center_l = (
-        #     mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
-        # ) / 2.0
-        # laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
+        center_l = (
+            mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
+        ) / 2.0
+        laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
 
         # # 左右边（不含角）
-        # center_u = (
-        #     mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
-        # ) / 2.0
-        # laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
+        center_u = (
+            mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
+        ) / 2.0
+        laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
 
-        # center_l = (
-        #     mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
-        # ) / 2.0
-        # laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
+        center_l = (
+            mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
+        ) / 2.0
+        laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
 
         # ===== 计算范数 =====
         laplace_norm_u = np.sum(laplace_u ** 2)
