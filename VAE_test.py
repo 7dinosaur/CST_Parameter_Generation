@@ -96,7 +96,7 @@ class AircraftVAE:
     # 加载模型（以后直接用）
     # ---------------------
     def load_model(self, model_path="vae_model.pth"):
-        ckpt = torch.load(model_path)
+        ckpt = torch.load(model_path, weight_only=False)
         self.input_dim = ckpt["input_dim"]
         self.latent_dim = ckpt["latent_dim"]
         self.x_min = ckpt["x_min"]

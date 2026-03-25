@@ -185,7 +185,7 @@ class Aircraft:
         f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
         f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
         leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
-        mask = (leading_edge_x > 3)&(leading_deri > 0.12)
+        mask = (leading_edge_x > 3)&(leading_deri > 0.135)
         idx = np.argmax(mask)
         dom1_end = leading_edge_x[idx] ##自动选择网格切分点
         dom1_start = leading_edge_x[0]
@@ -437,8 +437,8 @@ class Aircraft:
 
         return laplace_norm
 
-    def Laplace(self) -> tuple[float, float]:
-        span, chord = 101, 81
+    def Laplace(self) -> list[float]:
+        span, chord = 41, 41
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
 
         laplace_u = np.zeros_like(mesh_u)
@@ -460,39 +460,42 @@ class Aircraft:
 
         # ===== 边界处理 =====
         # 上下边（不含角）
-        center_u = (
-            mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
-        ) / 2.0
-        laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
+        # center_u = (
+        #     mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
+        # ) / 2.0
+        # laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
 
-        center_l = (
-            mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
-        ) / 2.0
-        laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
+        # center_l = (
+        #     mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
+        # ) / 2.0
+        # laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
 
-        # 左右边（不含角）
-        center_u = (
-            mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
-        ) / 2.0
-        laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
+        # # 左右边（不含角）
+        # center_u = (
+        #     mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
+        # ) / 2.0
+        # laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
 
-        center_l = (
-            mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
-        ) / 2.0
-        laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
+        # center_l = (
+        #     mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
+        # ) / 2.0
+        # laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
 
         # ===== 计算范数 =====
         laplace_norm_u = np.sum(laplace_u ** 2)
         laplace_norm_l = np.sum(laplace_l ** 2)
 
-        return laplace_norm_u, laplace_norm_l
+        return [laplace_norm_u, laplace_norm_l]
 
 if __name__ == "__main__":
     air_para = Aircraft()
-    air_para.read_from_csv("opt1_99.4_144.csv")
+    air_para.read_from_csv("smooth_test.csv")
+    # para = pd.read_csv("final_valid_samples.csv").to_numpy()[0, 3:]
+    # air_para = Aircraft(para.reshape([-1, 24]))
     print(air_para.Laplace())
     print(air_para.cal_volume())
     air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
-    lift = cal_Lift()
+    # air_para.write_mesh("panel", r"geo.x")
+    # lift = cal_Lift()
 
     # plt.show()

@@ -1,4 +1,6 @@
 from concurrent.futures import ProcessPoolExecutor
+
+from matplotlib.pylab import laplace
 from cal_Lift import cal_Lift
 import numpy as np
 import os
@@ -13,7 +15,7 @@ BASE_DIRS = [
     "MPI_FABOOM\\FABOOM_03",
     "MPI_FABOOM\\FABOOM_04"
 ]
-PARA_CSV = "opt1_99.4_144.csv"
+PARA_CSV = "smooth_test.csv"
 OUTPUT_CSV = "final_valid_samples.csv"
 LIFT_MIN = 1200000.0
 LIFT_MAX = 1500000.0
@@ -54,7 +56,8 @@ def generate_one_candidate(base_para, base_laplace):
     while True:
         new_para = perturb_para(base_para, PERTURB_RATE)
         air = Aircraft(new_para)
-        if air.Laplace() > base_laplace * GEOMETRY_FACTOR:
+        laplace = air.Laplace()
+        if laplace[0] > base_laplace[0] or laplace[1] > base_laplace[1] * GEOMETRY_FACTOR:
             continue
         passenger = air.cal_volume()
         if passenger >= PASSENGER_MIN:
@@ -67,7 +70,7 @@ def parallel_calc_lift(sample_list, dir_list):
         (0, sample_list, dir_list),
         (1, sample_list, dir_list),
         (2, sample_list, dir_list),
-        (3, sample_list, dir_list)
+        (3, sample_list, dir_list),
     ]
     
     with ProcessPoolExecutor(max_workers=4) as executor:
@@ -104,7 +107,6 @@ if __name__ == "__main__":
                 print("生成出错，跳过")
                 continue
 
-        # 2. 并行算 4 个升力（你测试过的稳定写法）
         print("\n🔥 4个一组，开始并行气动计算...")
         t0 = time.time()
         lift_results = parallel_calc_lift(batch, BASE_DIRS)
