@@ -410,91 +410,108 @@ class Aircraft:
                 passengers.append(0)
 
         return max(passengers)
-    
-    ##拉普拉斯能量
-    def old_Laplace(self) -> float:
-        span, chord = 101, 81
-        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
-        laplace_u, laplace_l = np.zeros_like(mesh_u), np.zeros_like(mesh_l)
-        for i in range(span):
-            for j in range(chord):
-                N_set = []
-                if i != 0 and i != span-1:
-                    N_set.append((i-1, j))
-                    N_set.append((i+1, j))
-                if j != 0 and j != chord-1:
-                    N_set.append((i, j-1))
-                    N_set.append((i, j+1))
-                if N_set:
-                    center_point_u = np.array([mesh_u[idx] for idx in N_set]).mean(axis=0)
-                    center_point_l = np.array([mesh_l[idx] for idx in N_set]).mean(axis=0)
-                    laplace_u[i, j] = mesh_u[i, j] - center_point_u
-                    laplace_l[i, j] = mesh_l[i, j] - center_point_l
-        laplace_norm_u = np.sum(laplace_u ** 2, axis=2).sum()
-        laplace_norm_l = np.sum(laplace_l ** 2, axis=2).sum()
-        laplace_norm = laplace_norm_u + laplace_norm_l
-        # print(laplace_norm)
-
-        return laplace_norm
 
     def Laplace(self) -> list[float]:
-        span, chord = 31, 61
+        span, chord = 61, 61
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
 
-        laplace_u = np.zeros_like(mesh_u)
-        laplace_l = np.zeros_like(mesh_l)
+        laplace_norm_u = self.Laplace_single(mesh_u)
+        laplace_norm_l = self.Laplace_single(mesh_l)
+
+        return [laplace_norm_u, laplace_norm_l]
+    
+    def Laplace_panel(self) -> list[float]:
+        panel_mesh = self.gene_panel_mesh(0)
+        laplace_norms = []
+        for dom in panel_mesh:
+            laplace_norms.append(self.Laplace_single(dom))
+
+        return laplace_norms
+    
+    def Laplace_single(self, mesh) -> float:
+
+        laplace = np.zeros_like(mesh)
 
         # ===== 中间区域 (有上下左右四个邻居) =====
-        center_u = (
-            mesh_u[:-2, 1:-1] + mesh_u[2:, 1:-1] +
-            mesh_u[1:-1, :-2] + mesh_u[1:-1, 2:]
+        center = (
+            mesh[:-2, 1:-1] + mesh[2:, 1:-1] +
+            mesh[1:-1, :-2] + mesh[1:-1, 2:]
         ) / 4.0
 
-        center_l = (
-            mesh_l[:-2, 1:-1] + mesh_l[2:, 1:-1] +
-            mesh_l[1:-1, :-2] + mesh_l[1:-1, 2:]
-        ) / 4.0
-
-        laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
-        laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
+        laplace[1:-1, 1:-1] = mesh[1:-1, 1:-1] - center
 
         # ===== 边界处理 =====
         # 上下边（不含角）
-        center_u = (
-            mesh_u[[0, -1], 0:-2] + mesh_u[[0, -1], 2:]
+        center = (
+            mesh[[0, -1], 0:-2] + mesh[[0, -1], 2:]
         ) / 2.0
-        laplace_u[[0, -1], 1:-1] = mesh_u[[0, -1], 1:-1] - center_u
-
-        center_l = (
-            mesh_l[[0, -1], 0:-2] + mesh_l[[0, -1], 2:]
-        ) / 2.0
-        laplace_l[[0, -1], 1:-1] = mesh_l[[0, -1], 1:-1] - center_l
+        laplace[[0, -1], 1:-1] = mesh[[0, -1], 1:-1] - center
 
         # # 左右边（不含角）
-        center_u = (
-            mesh_u[0:-2, [0, -1]] + mesh_u[2:, [0, -1]]
+        center = (
+            mesh[0:-2, [0, -1]] + mesh[2:, [0, -1]]
         ) / 2.0
-        laplace_u[1:-1, [0, -1]] = mesh_u[1:-1, [0, -1]] - center_u
-
-        center_l = (
-            mesh_l[0:-2, [0, -1]] + mesh_l[2:, [0, -1]]
-        ) / 2.0
-        laplace_l[1:-1, [0, -1]] = mesh_l[1:-1, [0, -1]] - center_l
+        laplace[1:-1, [0, -1]] = mesh[1:-1, [0, -1]] - center
 
         # ===== 计算范数 =====
-        laplace_norm_u = np.sum(laplace_u ** 2)
-        laplace_norm_l = np.sum(laplace_l ** 2)
+        laplace_norm = np.sum(laplace ** 2)
 
-        return [laplace_norm_u, laplace_norm_l]
+        return laplace_norm
+    
+    def Laplace_seperate(self) -> list[float]:
+        span, chord = 81, 61
+        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
+
+        span_laplace_u = np.zeros_like(mesh_u)
+        chord_laplace_u = np.zeros_like(mesh_u)
+        span_laplace_l = np.zeros_like(mesh_l)
+        chord_laplace_l = np.zeros_like(mesh_l)
+
+        # ===== 中间区域 (有上下左右四个邻居) =====
+        ##span方向laplace, 第一个维度代表span, 所以在第一个维度作差值, 不做差值的维度应该置1:-1
+        center_u = (
+            mesh_u[:-2, 1:-1] + mesh_u[2:, 1:-1]
+        ) / 2.0
+
+        center_l = (
+            mesh_l[:-2, 1:-1] + mesh_l[2:, 1:-1]
+        ) / 2.0
+
+        span_laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
+        span_laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
+
+        ##chord方向laplace, 第一个维度代表span, 所以在第二个维度作差值
+        center_u = (
+            mesh_u[1:-1, :-2] + mesh_u[1:-1, 2:]
+        ) / 2.0
+
+        center_l = (
+            mesh_l[1:-1, :-2] + mesh_l[1:-1, 2:]
+        ) / 2.0
+
+        chord_laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
+        chord_laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
+
+        span_laplace_u_norm = np.sum(span_laplace_u ** 2)
+        chord_laplace_u_norm = np.sum(chord_laplace_u ** 2)
+        span_laplace_l_norm = np.sum(span_laplace_l ** 2)
+        chord_laplace_l_norm = np.sum(chord_laplace_l ** 2)
+
+        return [span_laplace_u_norm, chord_laplace_u_norm, span_laplace_l_norm, chord_laplace_l_norm]
 
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    # para = pd.read_csv("final_valid_samples.csv").to_numpy()[0, 3:]
+    para = pd.read_csv("final_valid_samples.csv").to_numpy()[:, 3:]
     # air_para = Aircraft(para.reshape([-1, 24]))
     print(air_para.Laplace())
+    print(air_para.Laplace_seperate())
     print(air_para.cal_volume())
-    air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x")
+    for pa in para[:5]:
+        air_para = Aircraft(pa.reshape([-1, 24]))
+        print(air_para.Laplace())
+        # air_para.write_mesh("panel", r"check.x")
+        # input("Press Enter to continue...")
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 

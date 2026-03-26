@@ -99,7 +99,7 @@ if __name__ == "__main__":
         # 1. 先生成 4 个轻量合格样本（超快）
         while len(batch) < BATCH_SIZE:
             try:
-                para, pas = generate_one_candidate(base_para, base_laplace)
+                para, pas, _ = generate_one_candidate(base_para, base_laplace)
                 batch.append((para, pas, total_iter))
                 total_iter += 1
                 print(f"[{total_iter}] 候选样本生成完成 | 载客={pas}")
