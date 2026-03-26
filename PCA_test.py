@@ -54,6 +54,7 @@ class aircraft_para:
         eigen_vecs = eigen_vecs[:, ::-1]      # 特征向量对应排序
 
         plt.plot(list(range(len(eigen_vals))), eigen_vals)
+        plt.yscale('log')
 
         eigen_vals[eigen_vals < 1e-6] = 1e-6
         alpha = eigen_vecs[:, :k] / np.sqrt(eigen_vals[:k])
@@ -80,8 +81,8 @@ class aircraft_para:
         np.savez("PCA_dict.npz", **PCA_dict)
 
 if __name__ == "__main__":
-    data_path = "final_valid_samples.csv"
-    data = pd.read_csv(data_path).to_numpy()[:, 3:]
+    data_path = "224_base_smooth_test.csv"
+    data = pd.read_csv(data_path).to_numpy()[:200, 3:]
     para = aircraft_para(data)
     k = 15
     test_x = np.random.rand

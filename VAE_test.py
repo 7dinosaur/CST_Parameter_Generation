@@ -69,6 +69,8 @@ class AircraftVAE:
         optimizer = optim.Adam(model.parameters(), lr=lr)
         mse = nn.MSELoss()
 
+        losses = []  # 就加这行
+
         print(f"训练VAE，隐变量维度：{self.latent_dim}")
         for epoch in range(epochs):
             optimizer.zero_grad()
@@ -78,6 +80,7 @@ class AircraftVAE:
             loss = recon_loss + 1e-4 * kl_loss
             loss.backward()
             optimizer.step()
+            losses.append(loss.item())  # 就加这行
             if epoch % 100 == 0:
                 print(f"Epoch {epoch:3d} | Loss={loss:.5f}")
 
@@ -91,6 +94,10 @@ class AircraftVAE:
         }, model_path)
         self.model = model
         print("模型训练完成，已保存到：", model_path)
+
+        plt.plot(losses)
+        plt.yscale('log')
+        plt.show()
 
     # ---------------------
     # 加载模型（以后直接用）
@@ -128,8 +135,8 @@ class AircraftVAE:
 # ==============================================
 if __name__ == "__main__":
     # 1. 读取数据
-    data_path = "514_base_opt1.csv"
-    data = pd.read_csv(data_path).to_numpy()[:, 3:]
+    data_path = "224_base_smooth_test.csv"
+    data = pd.read_csv(data_path).to_numpy()[:200, 3:]
 
     # 2. 创建VAE对象（10维隐空间）
     vae = AircraftVAE(latent_dim=15)

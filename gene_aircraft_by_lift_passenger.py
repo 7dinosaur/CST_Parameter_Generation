@@ -14,17 +14,17 @@ def perturb_para(base_para, perturbation=0.05):
     ## 对CST参数进行扰动
     new_para[:, cst_cols] = params_to_perturb + perturb_factor
     ## 对剖面Z方向偏移进行扰动
-    new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.2
+    new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.5
     ## 对剖面的后缘z方向偏移进行扰动
     # new_para[:, -2:] = new_para[:, -2:] + (np.random.rand(*new_para[:, -2:].shape) - 0.5) * 0.2
     ## 对剖面x方向偏移进行扰动
-    new_para[:, -5:-3] = new_para[:, -5:-3] + (np.random.rand(*new_para[:, -5:-3].shape) - 0.5) * 0.2
+    new_para[:, -5:-3] = new_para[:, -5:-3] + (np.random.rand(*new_para[:, -5:-3].shape) - 0.5) * 0.5
 
     return new_para
 
 def main():
     para_csv = "opt1_99.4_144.csv"
-    output_csv = "new_samples_based_opt1.csv"
+    output_csv = "no_lift_samples.csv"
     LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 120
@@ -53,7 +53,8 @@ def main():
 
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
-            if new_air.Laplace() > base_laplace * 1.05:  # 几何光顺性判断（阈值可调整）
+            l1 = np.array(new_air.Laplace())
+            if (l1 > np.array(base_laplace) * 0.99).any():  # 几何光顺性判断（阈值可调整）
                 # print(f"❌ 几何光顺不合格")
                 continue
             print("正在计算载客量")
@@ -62,19 +63,20 @@ def main():
             if passenger < passenger_min:
                 print(f"❌ 不合格 | 载客量 {passenger}")
                 continue
+            print(f"✅ 合格 | 载客量: {passenger:.2f}")
             new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=4.0)
-            Lift = cal_Lift()
+            # Lift = cal_Lift()
 
             # 升力判断
-            if not Lift or Lift < LIFT_MIN_THRESHOLD or Lift > LIFT_MAX_THRESHOLD:
-                print(f"❌ 不合格 | 升力: {Lift:.2f}")
-                continue
+            # if not Lift or Lift < LIFT_MIN_THRESHOLD or Lift > LIFT_MAX_THRESHOLD:
+            #     print(f"❌ 不合格 | 升力: {Lift:.2f}")
+                # continue
 
             # 4. ✅ 合格：立刻保存到文件（实时写入，中断不丢）
-            print(f"✅ 合格 | 升力: {Lift:.2f} | 载客量: {passenger:.2f}")
+            # print(f"✅ 合格 | 升力: {Lift:.2f} | 载客量: {passenger:.2f}")
             
             # 拼接一行数据
-            row = [iteration, Lift, passenger, *new_para.flatten()]
+            row = [iteration, passenger, *new_para.flatten()]
             
             # 追加写入（关键：不会丢失数据）
             pd.DataFrame([row]).to_csv(output_csv, mode='a', header=False, index=False, encoding="utf-8-sig")
@@ -83,9 +85,9 @@ def main():
             print("\n🛑 手动中断程序！所有合格数据已保存，无丢失！")
             break
 
-        except Exception as e:
-            print(f"⚠️  计算出错，已跳过：{str(e)}")
-            continue
+        # except Exception as e:
+        #     print(f"⚠️  计算出错，已跳过：{str(e)}")
+        #     continue
 
 if __name__ == "__main__":
     main()
