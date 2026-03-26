@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import time
 
 from aircraft_gene import Aircraft
 from cal_Lift import cal_Lift
@@ -42,10 +43,13 @@ def main():
 
     base_air = Aircraft(base_para)
     base_laplace = base_air.Laplace()
+    pass_count = 0
 
+    t0 = time.time()
     while True:
         iteration += 1
-        print(f"\n----- 第 {iteration} 次生成 -----")
+        
+        # print(f"\n----- 第 {iteration} 次生成 -----")
 
         try:
             # 1. 扰动参数
@@ -54,17 +58,19 @@ def main():
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
             l1 = np.array(new_air.Laplace())
-            if (l1 > np.array(base_laplace) * 0.99).any():  # 几何光顺性判断（阈值可调整）
+            if (l1 > np.array(base_laplace) * 0.95).any():  # 几何光顺性判断（阈值可调整）
                 # print(f"❌ 几何光顺不合格")
                 continue
-            print("正在计算载客量")
+            # print("正在计算载客量")
             passenger = new_air.cal_volume()
             # 载客量判断
             if passenger < passenger_min:
                 print(f"❌ 不合格 | 载客量 {passenger}")
                 continue
-            print(f"✅ 合格 | 载客量: {passenger:.2f}")
-            new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=4.0)
+            t1 = time.time()
+            print(f"✅ 第{pass_count + 1}个合格样本 | 载客量: {passenger:.2f} | 耗时：{t1-t0}")
+            pass_count += 1
+            # new_air.write_mesh("panel", r"FABOOM_test\indata\geo.x", aoa=4.0)
             # Lift = cal_Lift()
 
             # 升力判断

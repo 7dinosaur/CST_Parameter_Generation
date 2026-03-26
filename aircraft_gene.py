@@ -181,11 +181,12 @@ class Aircraft:
         ##机头网格计算
         #===================================#
         leading_edge_x = this_para[:, 2*order+3]
+        leading_edge_y = this_para[:, 0]
         leading_edge_z = this_para[:, 2*order+5]
         f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
         f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
         leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
-        mask = (leading_edge_x > 3)&(leading_deri > 0.13)
+        mask = (leading_edge_x > 3)&(leading_deri > 0.12)&(leading_edge_y > 3.2)
         idx = np.argmax(mask)
         dom1_end = leading_edge_x[idx] ##自动选择网格切分点
         dom1_start = leading_edge_x[0]
@@ -503,12 +504,13 @@ if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
     air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 3.8)
-    para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
-    for pa in para[:5]:
-        air_para = Aircraft(pa.reshape([-1, 24]))
-        print(air_para.Laplace())
-        air_para.write_mesh("panel", r"check.x")
-        input("Press Enter to continue...")
+    cal_Lift()
+    # para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
+    # for pa in para[:5]:
+    #     air_para = Aircraft(pa.reshape([-1, 24]))
+    #     print(air_para.Laplace())
+    #     air_para.write_mesh("panel", r"check.x")
+    #     input("Press Enter to continue...")
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 
