@@ -503,7 +503,7 @@ class Aircraft:
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 3.8)
+    air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 4.0)
     cal_Lift()
     # para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
     # for pa in para[:5]:
