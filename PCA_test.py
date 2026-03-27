@@ -81,10 +81,11 @@ class aircraft_para:
         np.savez("PCA_dict.npz", **PCA_dict)
 
 if __name__ == "__main__":
-    data_path = "224_base_smooth_test.csv"
-    data = pd.read_csv(data_path).to_numpy()[:200, 3:]
+    data_path = "no_lift_samples.csv"
+    data = pd.read_csv(data_path).to_numpy()[:1000, 2:]
     para = aircraft_para(data)
     k = 15
     test_x = np.random.rand
     para.kernel_PCA(k)
+
     plt.show()
