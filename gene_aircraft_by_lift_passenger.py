@@ -15,7 +15,7 @@ def perturb_para(base_para, perturbation=0.05):
     ## 对CST参数进行扰动
     new_para[:, cst_cols] = params_to_perturb + perturb_factor
     ## 对剖面Z方向偏移进行扰动
-    new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.5
+    new_para[:, -3] = new_para[:, -3] + (np.random.rand(*new_para[:, -3].shape) - 0.5) * 0.1
     ## 对剖面的后缘z方向偏移进行扰动
     # new_para[:, -2:] = new_para[:, -2:] + (np.random.rand(*new_para[:, -2:].shape) - 0.5) * 0.2
     ## 对剖面x方向偏移进行扰动
@@ -36,7 +36,7 @@ def main():
 
     if not os.path.exists(output_csv):
         # 构造列名
-        columns = ["iteration", "Lift", "passenger"] + [f"param_{i}" for i in range(param_count)]
+        columns = ["iteration", "passenger"] + [f"param_{i}" for i in range(param_count)]
         pd.DataFrame(columns=columns).to_csv(output_csv, index=False, encoding="utf-8-sig")
 
     iteration = 0

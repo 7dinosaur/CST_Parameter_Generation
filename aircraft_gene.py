@@ -411,6 +411,37 @@ class Aircraft:
                 passengers.append(0)
 
         return max(passengers)
+    
+    def if_smooth(self, fig = False):
+        mesh = self.gene_simple_mesh(41, 31)
+        if fig:
+            plt.figure(figsize=(16, 5))
+        n_turn_u = 0
+        n_turn_l = 0
+        for i in range(1, 3):
+            line_u = mesh[0, :, i*10]
+            line_l = mesh[1, :, i*10]
+            deri_u = np.gradient(line_u[:, 2], line_u[:, 1])
+            deri_l = np.gradient(line_l[:, 2], line_l[:, 1])
+            deri2_u = np.gradient(deri_u, line_u[:, 1])
+            deri2_l = np.gradient(deri_l, line_l[:, 1])
+            for i in range(len(deri2_u)-1):
+                if (deri2_u[i] * deri2_u[i+1] < 0):
+                    n_turn_u += 1
+                if (deri2_l[i] * deri2_l[i+1] < 0):
+                    n_turn_l += 1
+            if fig:
+                plt.subplot(1, 3, 1)
+                plt.plot(line_u[:, 1], line_u[:, 2])
+                plt.plot(line_l[:, 1], line_l[:, 2])
+                plt.subplot(1, 3, 2)
+                plt.plot(line_u[:, 1], deri_u)
+                plt.plot(line_l[:, 1], deri_l)
+                plt.subplot(1, 3, 3)
+                plt.plot(line_u[:, 1], deri2_u)
+                plt.plot(line_l[:, 1], deri2_l)
+        
+        return n_turn_u, n_turn_l
 
     def Laplace(self) -> list[float]:
         span, chord = 61, 61
@@ -460,7 +491,7 @@ class Aircraft:
         return laplace_norm
     
     def Laplace_seperate(self) -> list[float]:
-        span, chord = 81, 61
+        span, chord = 121, 61
         mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
 
         span_laplace_u = np.zeros_like(mesh_u)
@@ -503,14 +534,17 @@ class Aircraft:
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 4.0)
-    cal_Lift()
-    # para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
-    # for pa in para[:5]:
-    #     air_para = Aircraft(pa.reshape([-1, 24]))
-    #     print(air_para.Laplace())
-    #     air_para.write_mesh("panel", r"check.x")
-    #     input("Press Enter to continue...")
+    # air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 4.0)
+    print(air_para.if_smooth())
+    # cal_Lift()
+    para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
+    for pa in para[:10]:
+        air_para = Aircraft(pa.reshape([-1, 24]))
+        print(air_para.Laplace())
+        print(air_para.Laplace_panel())
+        print(air_para.if_smooth())
+        air_para.write_mesh("panel", r"check.x")
+        input("Press Enter to continue...")
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 

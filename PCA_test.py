@@ -85,7 +85,6 @@ if __name__ == "__main__":
     data = pd.read_csv(data_path).to_numpy()[:1000, 2:]
     para = aircraft_para(data)
     k = 15
-    test_x = np.random.rand
     para.kernel_PCA(k)
 
     plt.show()
