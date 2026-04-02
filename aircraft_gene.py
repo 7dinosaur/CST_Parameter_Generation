@@ -538,7 +538,7 @@ if __name__ == "__main__":
     print(air_para.if_smooth())
     # cal_Lift()
     para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
-    for pa in para[:10]:
+    for pa in para[:20]:
         air_para = Aircraft(pa.reshape([-1, 24]))
         print(air_para.Laplace())
         print(air_para.Laplace_panel())

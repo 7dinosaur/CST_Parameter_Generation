@@ -24,12 +24,12 @@ def perturb_para(base_para, perturbation=0.05):
     return new_para
 
 def main():
-    para_csv = "opt1_99.4_144.csv"
+    para_csv = "smooth_test.csv"
     output_csv = "no_lift_samples.csv"
     LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 120
-    perturb_rate = 0.03           # 扰动幅度
+    perturb_rate = 0.02           # 扰动幅度
 
     base_para = pd.read_csv(para_csv).to_numpy()
     param_count = len(base_para.flatten())  # 自动计算参数数量
@@ -43,6 +43,7 @@ def main():
 
     base_air = Aircraft(base_para)
     base_laplace = base_air.Laplace()
+    btu, btl = base_air.if_smooth()
     pass_count = 0
 
     t0 = time.time()
@@ -58,7 +59,8 @@ def main():
             # 2. 生成模型 & 计算
             new_air = Aircraft(new_para)
             l1 = np.array(new_air.Laplace())
-            if (l1 > np.array(base_laplace) * 0.95).any():  # 几何光顺性判断（阈值可调整）
+            tu, tl = new_air.if_smooth()
+            if (l1 > np.array(base_laplace) * 0.97).any() or tu > btu +1 or tl > btl + 1:  # 几何光顺性判断（阈值可调整）
                 # print(f"❌ 几何光顺不合格")
                 continue
             # print("正在计算载客量")
