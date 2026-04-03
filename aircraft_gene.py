@@ -534,17 +534,17 @@ class Aircraft:
 if __name__ == "__main__":
     air_para = Aircraft()
     air_para.read_from_csv("smooth_test.csv")
-    # air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 4.0)
+    air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 3.2)
     print(air_para.if_smooth())
-    # cal_Lift()
+    print(cal_Lift())
     para = pd.read_csv("no_lift_samples.csv").to_numpy()[:, 2:]
-    for pa in para[:20]:
-        air_para = Aircraft(pa.reshape([-1, 24]))
-        print(air_para.Laplace())
-        print(air_para.Laplace_panel())
-        print(air_para.if_smooth())
-        air_para.write_mesh("panel", r"check.x")
-        input("Press Enter to continue...")
+    # for pa in para[:20]:
+    #     air_para = Aircraft(pa.reshape([-1, 24]))
+    #     print(air_para.Laplace())
+    #     print(air_para.Laplace_panel())
+    #     print(air_para.if_smooth())
+    #     air_para.write_mesh("panel", r"check.x")
+    #     input("Press Enter to continue...")
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 

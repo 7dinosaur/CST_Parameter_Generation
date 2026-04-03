@@ -24,8 +24,8 @@ def perturb_para(base_para, perturbation=0.05):
     return new_para
 
 def main():
-    para_csv = "smooth_test.csv"
-    output_csv = "no_lift_samples.csv"
+    para_csv = "opt1.csv"
+    output_csv = "samples_based_opt1.csv"
     LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 120
