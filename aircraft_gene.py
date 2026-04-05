@@ -361,13 +361,13 @@ class Aircraft:
     def cal_volume(self):
         """从对称面开始扫描索引,基准为2座位,每次增加一个座位,并评估载客量最多的方案"""
         height_cabin = 2.0 #客舱高度为2m
-        seats_width = 0.5 + 0.1 #座椅宽度为0.5m,间距0.1m
-        seats_length = 0.97 #座椅前后长度
+        seats_width = 0.5 + 0.05 #座椅宽度为0.5m,间距0.1m
+        seats_length = 0.95 #座椅前后长度
         aisle_width = 0.5 #过道宽度为0.5m
-        scan_range = range(2, 7) #扫描范围从2个座位到6个座位
+        scan_range = range(2, 6) #扫描范围从2个座位到6个座位
         prec = 100
         passengers = []
-        z_step = 0.2 #垂向扫描步长
+        z_step = 0.1 #垂向扫描步长
         
         for n_seats in scan_range:
             cabin_width = aisle_width + n_seats * seats_width

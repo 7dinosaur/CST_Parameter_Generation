@@ -15,11 +15,11 @@ def perturb_para(base_para, perturbation=0.05):
     ## 对CST参数进行扰动
     new_para[:, cst_cols] = params_to_perturb + perturb_factor
     ## 对剖面Z方向偏移进行扰动
-    new_para[1:, -3] = new_para[1:, -3] + (np.random.rand(*new_para[1:, -3].shape) - 0.5) * 1.0
+    new_para[1:, -3] = new_para[1:, -3] + (np.random.rand(*new_para[1:, -3].shape) - 0.5) * 0.1
     ## 对剖面的后缘z方向偏移进行扰动
     # new_para[:, -2:] = new_para[:, -2:] + (np.random.rand(*new_para[:, -2:].shape) - 0.5) * 0.2
     ## 对剖面x方向偏移进行扰动
-    new_para[1:, -5:-3] = new_para[1:, -5:-3] + (np.random.rand(*new_para[1:, -5:-3].shape) - 0.5) * 2.0
+    new_para[1:, -5:-3] = new_para[1:, -5:-3] + (np.random.rand(*new_para[1:, -5:-3].shape) - 0.5) * 1.5
 
     return new_para
 
@@ -29,7 +29,7 @@ def main():
     LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 120
-    perturb_rate = 0.02           # 扰动幅度
+    perturb_rate = 0.03           # 扰动幅度
 
     base_para = pd.read_csv(para_csv).to_numpy()
     param_count = len(base_para.flatten())  # 自动计算参数数量
