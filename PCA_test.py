@@ -74,7 +74,7 @@ class aircraft_para:
         n_sample = self.n_sample
 
         ## RBF核矩阵
-        gamma = 0.001 #超参数, ai推荐0.01~0.1
+        gamma = 0.5 #超参数, ai推荐0.01~0.1
         K = np.zeros((n_sample, n_sample))
         for i in range(n_sample):
             for j in range(n_sample):
@@ -133,8 +133,8 @@ class aircraft_para:
         np.savez("PCA_dict_opt1.npz", **PCA_dict)
 
 if __name__ == "__main__":
-    data_path = "samples_based_opt1_test_highrate.csv"
-    data = pd.read_csv(data_path).to_numpy()[:1000, 2:]
+    data_path = r"database\samples_based_bwb3.csv"
+    data = pd.read_csv(data_path).to_numpy()[:800, 2:74]
     para = aircraft_para(data)
     k = 15
     para.kernel_PCA(k)

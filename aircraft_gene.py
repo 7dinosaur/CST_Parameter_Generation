@@ -532,20 +532,36 @@ class Aircraft:
         return [span_laplace_u_norm, chord_laplace_u_norm, span_laplace_l_norm, chord_laplace_l_norm]
 
 if __name__ == "__main__":
-    air_para = Aircraft()
-    air_para.read_from_csv("smooth_test.csv")
-    air_para.write_mesh("panel", r"FABOOM_test\\indata\\geo.x", 3.2)
-    print(air_para.if_smooth())
+    bwb0 = Aircraft()
+    bwb0.read_from_csv(r"mesh_para/6.64_simple.csv")
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.8)
+    print(cal_Lift())
+    print(bwb0.cal_volume())
+    print(bwb0.Laplace())
+    print(bwb0.if_smooth())
+    n_span = 8
+    para0 = bwb0.interp_para(n_span)
+
+    ##==========================================================================================##
+    ## 样本集测试
+    ##==========================================================================================##
+    # para = pd.read_csv(r"database\samples_based_bwb3.csv").to_numpy()[:, 2:]
+    # new_pa = para[4].reshape([-1, 24])
+    # # pd.DataFrame(new_pa).to_csv("116_6.64.csv", index=False)
+    # air_para = Aircraft(new_pa)
+    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.45)
     # print(cal_Lift())
-    para = pd.read_csv("samples_based_opt1_test_highrate.csv").to_numpy()[:, 2:]
-    for pa in para[:20]:
-        air_para = Aircraft(pa.reshape([-1, 24]))
-        print(air_para.Laplace())
-        print(air_para.Laplace_panel())
-        print(air_para.if_smooth())
-        air_para.write_mesh("panel", r"check.x")
-        input("Press Enter to continue...")
+    # print(air_para.cal_volume())
+    # print(air_para.Laplace())
+    # print(air_para.if_smooth())
+    # for pa in para[:5]:
+    #     air_para = Aircraft(pa.reshape([-1, 24]))
+    #     print(air_para.Laplace())
+    #     print(air_para.Laplace_panel())
+    #     print(air_para.if_smooth())
+    #     air_para.write_mesh("panel", r"check.x", 0)
+    #     input("Press Enter to continue...")
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 
-    # plt.show()
+    plt.show()

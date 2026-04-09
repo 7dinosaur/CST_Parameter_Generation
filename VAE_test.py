@@ -15,7 +15,7 @@ from aircraft_gene import Aircraft
 class VAE(nn.Module):
     def __init__(self, input_dim, latent_dim=10):
         super(VAE, self).__init__()
-        self.num_station = 7
+        self.num_station = 3
         self.station_dim = 23
         self.latent_dim = latent_dim
         
@@ -27,21 +27,21 @@ class VAE(nn.Module):
         # )
 
         self.station_encoder = nn.Sequential(
-            nn.Linear(self.station_dim, 32), nn.ReLU(),
-            nn.Linear(32, 16), nn.ReLU()
+            nn.Linear(self.station_dim, 64), nn.ReLU(),
+            nn.Linear(64, 16), nn.ReLU()
         )
 
         self.fusion_encoder = nn.Sequential(
-            nn.Linear(16 * self.num_station, 64), nn.ReLU(),
-            nn.Linear(64, 64), nn.ReLU()
+            nn.Linear(16 * self.num_station, 128), nn.ReLU(),
+            nn.Linear(128, 128), nn.ReLU()
         )
         
-        self.fc_mu = nn.Linear(64, latent_dim)
-        self.fc_logvar = nn.Linear(64, latent_dim)
+        self.fc_mu = nn.Linear(128, latent_dim)
+        self.fc_logvar = nn.Linear(128, latent_dim)
 
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64), nn.ReLU(),
-            nn.Linear(64, 16 * self.num_station), nn.ReLU(), 
+            nn.Linear(latent_dim, 128), nn.ReLU(),
+            nn.Linear(128, 16 * self.num_station), nn.ReLU(), 
         )
 
         self.station_decoder = nn.Sequential(
@@ -98,7 +98,7 @@ class AircraftVAE:
     # ---------------------
     # 训练 + 保存模型
     # ---------------------
-    def train_and_save(self, data, model_path="vae_model.pth", epochs=800, lr=1e-3):
+    def train_and_save(self, data, model_path="vae_model.pth", epochs=800, lr=1e-2):
         self.input_dim = data.shape[1]
         self.x_min = np.min(data, axis=0)
         self.x_max = np.max(data, axis=0)
@@ -131,7 +131,7 @@ class AircraftVAE:
                 recon_loss = mse(recon_x, x)
                 kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
                 beta = min(1.0, epoch / 200)  # KL annealing
-                loss = recon_loss + kl_loss
+                loss = 0.9 * recon_loss + 0.1 * kl_loss
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
@@ -198,10 +198,10 @@ class AircraftVAE:
 # ==============================================
 if __name__ == "__main__":
     # 1. 读取数据
-    data_path = "no_lift_samples.csv"
-    data = pd.read_csv(data_path).to_numpy()[:1000, 2:].reshape([1000, -1, 24])
+    data_path = r"database\samples_based_bwb3.csv"
+    data = pd.read_csv(data_path).to_numpy()[:800, 2:74].reshape([800, -1, 24])
     first_col = data[0, :, 0]
-    data = data[:, :, 1:].reshape([1000, -1])
+    data = data[:, :, 1:].reshape([800, -1])
 
 
     # 2. 创建VAE对象（10维隐空间）
