@@ -358,6 +358,29 @@ class Aircraft:
                             f.write(line_str + "\n")
                 print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
+    def gene_mesh_for_SU2(self, file_path:str = "geo.x", aoa = 3.0):
+        mesh = self.gene_panel_mesh(aoa)[:-1]
+        dom5 = np.concatenate([mesh[4], mesh[5][:, 1:]], axis=1)
+        mesh[4:6] = [dom5]
+
+        with open(file_path, 'w') as f:
+            print("写入面元网格...")
+            f.write(f"{len(mesh)}\n")
+            for dom in mesh:
+                n_i, n_j = dom.shape[1], dom.shape[0]
+                f.write(f"{n_i} {n_j} 1\n")
+            for dom in mesh:
+                dom = dom.transpose(2, 0, 1)
+                row_size = 4  # 控制每行4个元素
+                for coord in dom:
+                    coord = coord.flatten()
+                    for i in range(0, len(coord), row_size):
+                        line_elements = coord[i:i+row_size]
+                        line_str = " ".join(f"{x:.6f}" for x in line_elements)
+                        f.write(line_str + "\n")
+            print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
+
+
     def cal_volume(self):
         """从对称面开始扫描索引,基准为2座位,每次增加一个座位,并评估载客量最多的方案"""
         height_cabin = 2.0 #客舱高度为2m
@@ -533,9 +556,10 @@ class Aircraft:
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    bwb0.read_from_csv(r"mesh_para/6.64_simple.csv")
-    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.8)
-    print(cal_Lift())
+    bwb0.read_from_csv(r"mesh_para\165_6.64.csv")
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.35)
+    bwb0.gene_mesh_for_SU2("geo.x", 3.35)
+    # print(cal_Lift())
     print(bwb0.cal_volume())
     print(bwb0.Laplace())
     print(bwb0.if_smooth())
@@ -545,9 +569,9 @@ if __name__ == "__main__":
     ##==========================================================================================##
     ## 样本集测试
     ##==========================================================================================##
-    # para = pd.read_csv(r"database\samples_based_bwb3.csv").to_numpy()[:, 2:]
-    # new_pa = para[4].reshape([-1, 24])
-    # # pd.DataFrame(new_pa).to_csv("116_6.64.csv", index=False)
+    # para = pd.read_csv(r"database\samples_based_bwb3.csv").to_numpy()[143, 2:].reshape([1, -1])
+    # new_pa = para.reshape([-1, 24])
+    # pd.DataFrame(new_pa).to_csv("165_6.64.csv", index=False)
     # air_para = Aircraft(new_pa)
     # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.45)
     # print(cal_Lift())
