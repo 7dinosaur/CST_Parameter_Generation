@@ -7,6 +7,7 @@ from scipy.special import comb
 from matplotlib import pyplot as plt
 from cal_Lift import cal_Lift, cal_PLdB
 import time
+import os
 
 def deri_1d(x, y):
     assert len(x) == len(y), "xy应有相同形状"
@@ -132,7 +133,7 @@ class Aircraft:
 
         return mesh
     
-    def gene_panel_mesh(self, aoa:float = 3.0) -> list[ndarray]:
+    def gene_panel_mesh(self, aoa:float = 3.0, shape = [31, 60, 10, 10, 29]) -> list[ndarray]:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """panel_mesh是可以直接输入faboom程序计算的分块网格"""
         def redistribution(x, y, n):
@@ -159,14 +160,14 @@ class Aircraft:
 
             return x_pingjun, y_pingjun
 
-        this_para = self.interp_para(61) ##此处插值仅保证曲线光滑，实际网格尺度与插值长度无关
+        this_para = self.interp_para(62) ##此处插值仅保证曲线光滑，实际网格尺度与插值长度无关
         order = self.cst_order
 
         ##统一网格尺度设置
-        nose_i, body_i, tail_i = 31, 60, 10
-        nose_j = body_j = tail_j = 10
+        nose_i, body_i, tail_i = shape[0], shape[1], shape[2]
+        nose_j = body_j = tail_j = shape[3]
         wing_i = body_i
-        wing_j = 29
+        wing_j = shape[4]
 
         ##头部网格计算
         dom1, dom2 = np.zeros([nose_i, nose_j, 3]), np.zeros([nose_i, nose_j, 3]) ##机头网格
@@ -326,7 +327,7 @@ class Aircraft:
         """自动识别网格类型并写入文件"""
         with open(file_path, 'w') as f:
             if mesh_type == "simple": #simple mesh
-                mesh = self.gene_simple_mesh(41, 60)
+                mesh = self.gene_simple_mesh(81, 120)
                 print("写入一般网格...")
                 n_dom = mesh.shape[0]
                 n_i = mesh.shape[1]
@@ -359,7 +360,7 @@ class Aircraft:
                 print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
     def gene_mesh_for_SU2(self, file_path:str = "geo.x", aoa = 3.0):
-        mesh = self.gene_panel_mesh(aoa)[:-1]
+        mesh = self.gene_panel_mesh(aoa, shape=[41, 80, 20, 20, 41])[:-1]
         dom5 = np.concatenate([mesh[4], mesh[5][:, 1:]], axis=1)
         mesh[4:6] = [dom5]
 
@@ -380,14 +381,57 @@ class Aircraft:
                         f.write(line_str + "\n")
             print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
 
+    def export_airfoil_profiles(self, output_dir="airfoil_profiles", n_points=60):
+        mesh_para = self.origin_para.copy()
+
+        # 1. 创建输出目录
+        os.makedirs(output_dir, exist_ok=True)
+        exported_count = 0
+
+        print(f"正在导出原始参数剖面的翼型文件到目录 '{output_dir}'...")
+        
+        # 2. 遍历mesh_para的每一行（每个原始剖面）
+        for idx, data_line in enumerate(mesh_para):
+            try:
+                data_line[-5] = 0; data_line[-4] = 1; data_line[-3] = 0
+                coords_u, coords_l = self.cst_rec(data_line, N1=0.5, N2=1, n_points=n_points)
+
+                lower_surface_ordered = coords_l.T[::-1]   # 反转下表面顺序
+                upper_surface_ordered = coords_u.T   # 反转上表面顺序
+                selig_coords = np.vstack((lower_surface_ordered, upper_surface_ordered))
+                if idx == 0:    
+                    plt.plot(selig_coords[:,0], selig_coords[:,1])
+                    plt.ylim(-0.5,0.5)
+                    plt.xlim(0,1)
+
+                # 6. 定义输出文件名和路径
+                filename = f"{idx}.dat" # 使用自然数索引命名
+                filepath = os.path.join(output_dir, filename)
+
+                # 7. 写入文件
+                with open(filepath, 'w') as f:
+                    # 可选：添加一行注释头
+                    # f.write(f"# Airfoil profile from original section {idx}\n")
+                    for point in selig_coords:
+                        f.write(f"{point[0]:.6f}   {point[1]:.6f}\n")
+
+                exported_count += 1
+                # print(f"已导出: {filepath}") # 如需详细日志可取消注释
+
+            except Exception as e:
+                print(f"处理剖面索引 {idx} 时出错: {e}")
+                # 可以选择继续处理下一个剖面或抛出异常
+
+        print(f"所有原始剖面翼型文件导出完毕。共成功导出 {exported_count} 个文件。")
+        return exported_count
 
     def cal_volume(self):
         """从对称面开始扫描索引,基准为2座位,每次增加一个座位,并评估载客量最多的方案"""
         height_cabin = 2.0 #客舱高度为2m
         seats_width = 0.5 + 0.05 #座椅宽度为0.5m,间距0.1m
-        seats_length = 0.95 #座椅前后长度
+        seats_length = 0.97 #座椅前后长度
         aisle_width = 0.5 #过道宽度为0.5m
-        scan_range = range(2, 6) #扫描范围从2个座位到6个座位
+        scan_range = range(4, 5) #扫描范围从2个座位到6个座位
         prec = 100
         passengers = []
         z_step = 0.1 #垂向扫描步长
@@ -428,7 +472,7 @@ class Aircraft:
                 max_len = len_sym[max_len][2]
                 n_row = int(max_len/seats_length)
                 # print(max_row)
-                # print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
+                print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
                 passengers.append(n_row*n_seats)
             else:
                 passengers.append(0)
@@ -556,8 +600,9 @@ class Aircraft:
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    bwb0.read_from_csv(r"mesh_para\165_6.64.csv")
-    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.35)
+    bwb0.read_from_csv(r"mesh_para\6.64_simple.csv")
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0)
+    # bwb0.export_airfoil_profiles()
     bwb0.gene_mesh_for_SU2("geo.x", 3.35)
     # print(cal_Lift())
     print(bwb0.cal_volume())
