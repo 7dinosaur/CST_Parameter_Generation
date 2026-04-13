@@ -10,10 +10,10 @@ def perturb_para(base_para, perturbation=0.05):
     new_para = base_para.copy()
 
     cst_cols = slice(1, 19)
-    params_to_perturb = new_para[:, cst_cols]
+    params_to_perturb = new_para[2:, cst_cols]
     perturb_factor = perturbation * (2 * np.random.rand(*params_to_perturb.shape) - 1)
     ## 对CST参数进行扰动
-    new_para[:, cst_cols] = params_to_perturb + perturb_factor
+    new_para[2:, cst_cols] = params_to_perturb + perturb_factor
     ## 对剖面Z方向偏移进行扰动
     new_para[1:, -3] = new_para[1:, -3] + (np.random.rand(*new_para[1:, -3].shape) - 0.5) * 0.1
     ## 对剖面的后缘z方向偏移进行扰动
@@ -25,7 +25,7 @@ def perturb_para(base_para, perturbation=0.05):
 
 def main():
     para_csv = r"mesh_para\\6.64_simple.csv"
-    output_csv = r"database\samples_based_165_664.csv"
+    output_csv = r"database\samples_based_manual.csv"
     LIFT_MIN_THRESHOLD = 1200000.0  # 升力下限
     LIFT_MAX_THRESHOLD = 1500000.0  # 升力上限
     passenger_min = 160
@@ -60,7 +60,7 @@ def main():
             new_air = Aircraft(new_para)
             l1 = np.array(new_air.Laplace())
             tu, tl = new_air.if_smooth()
-            if (l1 > np.array(base_laplace) * 1.0).any() or tu > 6 or tl > 6:  # 几何光顺性判断（阈值可调整）
+            if (l1 > np.array(base_laplace) * 1.1).any() or tu > 7 or tl > 6:  # 几何光顺性判断（阈值可调整）
             # if (l1 > np.array(base_laplace) * 1.2).any():  # 几何光顺性判断（阈值可调整）
                 # print(f"❌ 几何光顺不合格")
                 continue

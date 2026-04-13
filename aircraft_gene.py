@@ -115,6 +115,67 @@ class Aircraft:
         coord_l = np.array([x_true, y_lower])
 
         return coord_u, coord_l
+    
+    def reassign_cst_order(self, new_cst_order: int, fit_points: int = 100) -> ndarray:
+        """
+        重分配CST阶数，拟合新的CST系数并生成新的参数列表
+        
+        参数：
+            new_cst_order: 新的CST阶数（正整数）
+            fit_points: 拟合用的弦向采样点数，默认100足够精确
+        
+        返回：
+            new_origin_para: 新的完整参数列表数组，形状与原参数列表一致，仅CST系数更新
+        """
+        # 原始参数与几何参数
+        old_para = self.origin_para
+        new_para_list = []
+        
+        # 遍历每一个展向截面，逐截面拟合新CST系数
+        for sec_para in old_para:
+            # 1. 用原始CST参数生成精确的翼型坐标点（用于拟合）
+            coord_u, coord_l = self.cst_rec(sec_para, self.N1, self.N2, n_points=fit_points)
+            x_coords, y_u_coords = coord_u
+            x_coords, y_l_coords = coord_l
+            
+            # 提取原始固定几何参数（前缘、后缘、偏移、后缘偏移等）
+            le = sec_para[-5]
+            te = sec_para[-4]
+            z_offset = sec_para[-3]
+            dy_upper = sec_para[-2]
+            dy_lower = sec_para[-1]
+            chord = te - le
+            psi = (x_coords - le) / chord  # 归一化弦长坐标
+            
+            # 2. 构建新阶数的Bernstein基函数矩阵
+            n = new_cst_order
+            B_new = np.zeros((fit_points, n + 1))
+            for i in range(n + 1):
+                B_new[:, i] = comb(n, i) * (psi ** i) * ((1 - psi) ** (n - i))
+            # CST形状函数
+            shape_func = (psi ** self.N1) * ((1 - psi) ** self.N2)
+            B_shape = shape_func.reshape(-1, 1) * B_new  # 带形状函数的基矩阵
+            
+            # 3. 最小二乘拟合新的CST系数
+            # 上表面拟合
+            y_u_target = (y_u_coords - z_offset - psi * dy_upper) / chord
+            new_coeffs_u = np.linalg.lstsq(B_shape, y_u_target, rcond=None)[0]
+            # 下表面拟合
+            y_l_target = (y_l_coords - z_offset - psi * dy_lower) / chord
+            new_coeffs_l = np.linalg.lstsq(B_shape, y_l_target, rcond=None)[0]
+            
+            # 4. 拼接新的截面参数
+            y_span = sec_para[0]  # 展向坐标
+            new_sec_para = np.hstack([y_span, new_coeffs_u, new_coeffs_l,
+                                     le, te, z_offset, dy_upper, dy_lower])
+            new_para_list.append(new_sec_para)
+        
+        # 5. 生成新参数数组，更新类内属性
+        new_origin_para = np.array(new_para_list)
+        self.origin_para = new_origin_para
+        self.cst_order = new_cst_order
+        
+        return new_origin_para
 
     def gene_simple_mesh(self, num_span, num_chord) -> ndarray:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
@@ -431,7 +492,7 @@ class Aircraft:
         seats_width = 0.5 + 0.05 #座椅宽度为0.5m,间距0.1m
         seats_length = 0.97 #座椅前后长度
         aisle_width = 0.5 #过道宽度为0.5m
-        scan_range = range(4, 5) #扫描范围从2个座位到6个座位
+        scan_range = range(4, 6) #扫描范围从2个座位到6个座位
         prec = 100
         passengers = []
         z_step = 0.1 #垂向扫描步长
@@ -472,7 +533,7 @@ class Aircraft:
                 max_len = len_sym[max_len][2]
                 n_row = int(max_len/seats_length)
                 # print(max_row)
-                print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
+                # print(f"每排{n_seats}座: 客舱宽度为{cabin_width}, 长度为{max_len:.2f}, 容纳排数{n_row}, 载客量{n_row*n_seats}")
                 passengers.append(n_row*n_seats)
             else:
                 passengers.append(0)
@@ -483,20 +544,24 @@ class Aircraft:
         mesh = self.gene_simple_mesh(41, 31)
         if fig:
             plt.figure(figsize=(16, 5))
-        n_turn_u = 0
-        n_turn_l = 0
-        for i in range(1, 3):
+        n_turn_u = 0.
+        n_turn_l = 0.
+        for i in range(4):
             line_u = mesh[0, :, i*10]
             line_l = mesh[1, :, i*10]
             deri_u = np.gradient(line_u[:, 2], line_u[:, 1])
+            n_turn_u += (np.max(line_u[:, 2]) - np.min(line_u[:, 2]))
             deri_l = np.gradient(line_l[:, 2], line_l[:, 1])
+            n_turn_l += (np.max(line_l[:, 2]) - np.min(line_l[:, 2]))
             deri2_u = np.gradient(deri_u, line_u[:, 1])
+            n_turn_u += np.sum(deri2_u**2)
             deri2_l = np.gradient(deri_l, line_l[:, 1])
-            for i in range(len(deri2_u)-1):
-                if (deri2_u[i] * deri2_u[i+1] < 0):
-                    n_turn_u += 1
-                if (deri2_l[i] * deri2_l[i+1] < 0):
-                    n_turn_l += 1
+            n_turn_l += np.sum(deri2_l**2)
+            # for i in range(len(deri2_u)-1):
+            #     if (deri2_u[i] * deri2_u[i+1] < 0):
+            #         n_turn_u += 1
+            #     if (deri2_l[i] * deri2_l[i+1] < 0):
+            #         n_turn_l += 1
             if fig:
                 plt.subplot(1, 3, 1)
                 plt.plot(line_u[:, 1], line_u[:, 2])
@@ -507,6 +572,49 @@ class Aircraft:
                 plt.subplot(1, 3, 3)
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
+        
+        return n_turn_u, n_turn_l
+    
+    def if_smooth_new(self, fig = False):
+        mesh = self.gene_simple_mesh(41, 31)
+        u_line1 = []; u_line2 = []; l_line1 = []; l_line2 = []
+        if fig:
+            plt.figure(figsize=(16, 5))
+        n_turn_u = 0
+        n_turn_l = 0
+        for i_span in range(41):
+            sec_u = mesh[0, i_span, :]
+            sec_l = mesh[1, i_span, :]
+            u_line1.append([sec_u[0, 1], np.max(sec_u[:, 2])])
+            u_line2.append([sec_u[0, 1], np.min(sec_u[:, 2])])
+            l_line1.append([sec_l[0, 1], np.max(sec_l[:, 2])])
+            l_line2.append([sec_l[0, 1], np.min(sec_l[:, 2])])
+
+        line = [np.array(line) for line in [u_line1, u_line2, l_line1, l_line2]]
+        for l in line:
+            plt.plot(l[:, 0], l[:, 1])
+        # for i in range(1, 3):
+        #     line_u = mesh[0, :, i*10]
+        #     line_l = mesh[1, :, i*10]
+        #     deri_u = np.gradient(line_u[:, 2], line_u[:, 1])
+        #     deri_l = np.gradient(line_l[:, 2], line_l[:, 1])
+        #     deri2_u = np.gradient(deri_u, line_u[:, 1])
+        #     deri2_l = np.gradient(deri_l, line_l[:, 1])
+        #     for i in range(len(deri2_u)-1):
+        #         if (deri2_u[i] * deri2_u[i+1] < 0):
+        #             n_turn_u += 1
+        #         if (deri2_l[i] * deri2_l[i+1] < 0):
+        #             n_turn_l += 1
+        #     if fig:
+        #         plt.subplot(1, 3, 1)
+        #         plt.plot(line_u[:, 1], line_u[:, 2])
+        #         plt.plot(line_l[:, 1], line_l[:, 2])
+        #         plt.subplot(1, 3, 2)
+        #         plt.plot(line_u[:, 1], deri_u)
+        #         plt.plot(line_l[:, 1], deri_l)
+        #         plt.subplot(1, 3, 3)
+        #         plt.plot(line_u[:, 1], deri2_u)
+        #         plt.plot(line_l[:, 1], deri2_l)
         
         return n_turn_u, n_turn_l
 
@@ -600,23 +708,27 @@ class Aircraft:
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    bwb0.read_from_csv(r"mesh_para\6.64_simple.csv")
-    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0)
+    bwb0.read_from_csv(r"mesh_para\tmp_bwb.csv")
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.9)
     # bwb0.export_airfoil_profiles()
-    bwb0.gene_mesh_for_SU2("geo.x", 3.35)
-    # print(cal_Lift())
+    bwb0.gene_mesh_for_SU2("geo.x", 0.0)
+    # new_para = bwb0.reassign_cst_order(4)
+
+    # bwb0 = Aircraft(new_para)
+    print(cal_Lift())
     print(bwb0.cal_volume())
     print(bwb0.Laplace())
-    print(bwb0.if_smooth())
+    print(bwb0.if_smooth(fig=True))
     n_span = 8
     para0 = bwb0.interp_para(n_span)
+    # pd.DataFrame(para0).to_csv(r"mesh_para\\tmp_bwb.csv", index=False)
 
     ##==========================================================================================##
     ## 样本集测试
     ##==========================================================================================##
-    # para = pd.read_csv(r"database\samples_based_bwb3.csv").to_numpy()[143, 2:].reshape([1, -1])
+    # para = pd.read_csv(r"database\samples_based_manual.csv").to_numpy()[0, 2:].reshape([1, -1])
     # new_pa = para.reshape([-1, 24])
-    # pd.DataFrame(new_pa).to_csv("165_6.64.csv", index=False)
+    # # pd.DataFrame(new_pa).to_csv("165_6.64.csv", index=False)
     # air_para = Aircraft(new_pa)
     # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.45)
     # print(cal_Lift())

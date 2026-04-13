@@ -43,9 +43,9 @@ def fit_cst_airfoil(target_u, target_l, order=4, N1=0.5, N2=1):
     输出：para 完整参数数组 → 可直接传入你的 cst_rec()
     """
     x = np.linspace(target_u[0, 0], target_u[-1, 0], 60)
-    f = scipy.interpolate.interp1d(target_u[:, 0], target_u[:, 1], kind=5)
+    f = scipy.interpolate.interp1d(target_u[:, 0], target_u[:, 1], kind=4)
     target_u = np.array([x, f(x)]).T
-    f = scipy.interpolate.interp1d(target_l[:, 0], target_l[:, 1], kind=5)
+    f = scipy.interpolate.interp1d(target_l[:, 0], target_l[:, 1], kind=6)
     target_l = np.array([x, f(x)]).T
     # ===================== 步骤1：从目标翼型自动提取固定参数 =====================
     x_target = target_u[:, 0]
@@ -133,12 +133,12 @@ def opt(cst):
 if __name__ == "__main__":
     extra_para = [0., 72.0, 0, 0.0208, 0.0208]
     n = 12
-    target_u = np.array([[0.0, 0.0]] + [[round(15.8 + i * (54.8 - 15.8) / (n-1), 2), 1.55] for i in range(n)] + [[70.0, 1.55]])
-    target_l = np.array([[0.0, 0.0], [8, -0.1]] + [[round(15.8 + i * (54.8 - 15.8) / (n-1), 2), -0.65] for i in range(n)] + [[70.0, 1.55]])
+    target_u = np.array([[0.0, 0.0]] + [[round(20 + i * (51.04 - 20) / (n-1), 2), 1.55] for i in range(n)] + [[72.0, 1.05]])
+    target_l = np.array([[0.0, 0.0], [10.5, 0.45]] + [[round(20 + i * (51.04 - 20) / (n-1), 2), -0.65] for i in range(n)] + [[72.0, 1.05]])
 
     z_off = 0.5
-    sec_2 = np.array([6.0, z_off]); sec_2_end = np.array([70.0, 1.55])
-    target_u[0] = sec_2; target_u[-1] = sec_2_end; target_u[1:, 1] -= z_off
+    sec_2 = np.array([10.0, z_off]); sec_2_end = np.array([70.0, 1.05])
+    target_u[0] = sec_2; target_u[-1] = sec_2_end; target_u[1:, 1] -= z_off; target_u[1:-1, 1]
     target_l[0] = sec_2; target_l[-1] = sec_2_end; target_l[1:, 1] -= z_off; target_l[1:-1, 1] += 0.2
     plt.scatter(target_u[:, 0], target_u[:, 1])
     plt.scatter(target_l[:, 0], target_l[:, 1])
