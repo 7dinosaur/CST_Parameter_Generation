@@ -1,0 +1,176 @@
+﻿=====FMACH=====HEAD=====CRUISE ALTITUDE (m)=====BOOM ALTITUDE (m)=====REFLECT=====
+     1.8        0.0      18000                  0                     1.9
+=====AIRCRAFT LENGTH (m)=====MODEL LENGTH=====
+     72                      72
+=====ROVERL=====PHI (degree)=====
+     3        0
+=====NX OF XI-DP=====FORE_EXTENSION=====REAR_EXTENSION=====
+     0               1               0.25
+=====sampling frequency (kHz)=====DSIGMA=====
+     555.473                      0.05
+=====BURGERS=====NONLINEARITY=====ANON=====ALFA=====METHOD_RAY_TRACING=====METHOD_BURGERS=====
+     1111        0                0.5      0.5      1                      1
+=====HOWARD=====EFFECTS=====FORE_EXTENSION_HOWARD=====REAR_EXTENSION_HOWARD=====
+     0          11111111    0.25                      0.25
+=====ABL HIGHT (m)=====TURBULENCE Y (m)=====TURBULENCE X (m)=====DIM H=====DIM Y=====DIM X=====
+     1000              1000                 1000                 101        101        101
+=====FOURIER MODE=====RANDOM=====HOMOGENEITY=====ENERGY SPECTRUM=====
+     400              1          1                         0
+=====WIND FLUCTUATION(m/s)=====TEMPERATURE FLUCTUATION(K)=====TURBULENCE OUTER=====
+     5                           1                   30
+=====DISC S (m)=====DISC Y (m)=====DIFFRACTION=====
+     1.0            1.0            2
+=====IWRITE====INTERVAL=====
+     0         500
+=====ADJOINT BURGERS=====OBJECTIVE FUNCTION=====
+     0                   0
+=====run command and out filename to obtain objective and partial(obj)/partial(farfield)=====
+partial_obj_farfield.exe
+PARTIAL_OBJ_FARFIELD.DAT
+
+
+
+
+
+=========================
+=====FMACH=====HEAD=====CRUISE ALTITUDE (m)=====BOOM ALTITUDE (m)=====REFLECT=====
+FMACH                   :    巡航马赫数
+HEAD                    :    飞机机头的方向角（0~360，单位，degree），北向为起始顺时针为正
+CRUISE ALTITUDE (m)     :    巡航高度（单位，m）
+BOOM ALTITUDE (m)       :    远场位置高度（单位，m）
+REFLECT                 :    地面的反射效应因子（0~2.0，一般为1.9）
+
+=====AIRCRAFT LENGTH (m)=====MODEL LENGTH=====
+AIRCRAFT LENGTH (m)     :    实际飞机的长度（单位，m）
+MODEL LENGTH            :    风洞实验模型或CFD计算的模型长度（与XI的单位相同即可）
+
+=====ROVERL=====PHI (degree)=====
+ROVERL                  :    近场测量位置到飞机轴线的距离（由机身长度无量纲化的距离）
+PHI (degree)            :    测量PHI角（周向角，degree）
+
+=====NX OF XI-DP=====FORE_EXTENSION=====REAR_EXTENSION=====
+NX OF XI-DP             :    输入近场压强信号的压强点个数。当该值小于等于0或大于NEAR_FIELD_PRESSURE.DAT文件输入数据个数时，其值为输入数据个数，因此无特殊情况该值设置为0即可
+FORE_EXTENSION          :    输入信号向前延伸的长度占输入信号长度的比例
+REAR_EXTENSION          :    输入信号向后延伸的长度占输入信号长度的比例
+
+=====sampling frequency (kHz)=====DSIGMA=====
+sampling frequency (kHz):    burgers方程推进过程中，时间方向上的采样频率（采样点数N=T*fs+1）
+DSIGMA                  :    无量纲空间网格间隔，该值越小算子分裂法精度越高，一般小于0.05
+
+=====BURGERS=====NONLINEARITY=====ANON=====ALFA=====METHOD_RAY_TRACING=====METHOD_BURGERS=====
+BURGERS                 :    四位2进制数
+                  0000  :    无意义
+                  0001  :    只考虑分子弛豫
+                  0010  :    只考虑热粘影响
+                  0100  :    只考虑分层大气和声学传播
+                  1000  :    只考虑非线性效应
+                             四种效应可组合（例如，1100,表示同时考虑非线性和分层大气和声学传播）
+
+NONLINEARITY            :    非线性效应离散求解方法（0~4），推荐取0或4
+                     0  :    Burgers-Hayes方法，通过波形包围的面积函数确定激波位置
+                     1  :    对称正反两次插值取均值，不对单独确定激波位置，直接对扭曲后的波形两次插值取平均值
+                     2  :    针对扭曲后的波形，在多值区域简化成三角形来确定激波位置，AIAA-AIAA-2019-3571论文
+                     3  :    根据Cleveland博士论文提到的方法，对扭曲的波形进行插值处理（P82,4.1.1节）
+                     4  :    采用5阶的WENO格式进行计算；当采用本方法时，如果sampling frequency (kHz)参数如果太大，则非线性求解容易发散，此时应减小DSIGMA参数值
+                     
+ANON                    :    当NONLINEARITY=4时，即采用5阶WENO格式计算非线性，起作用；当WENO格式计算发散时，可适当调整改参数（ANON=0~1，系数越靠近1.0，格式越稳定）
+                             ANON<0.5时，空间推进采用3步龙格库塔方法
+                             ANON=0.5时，空间推进为二阶精度
+                             ANON=1.0时，空间推进为全隐式，精度为一阶精度
+
+ALFA                    :    分子弛豫效应离散过程中的插值系数（ALFA=0~1，系数越靠近于1.0，格式越稳定）
+                             当ALFA=0.0时，分子弛豫的离散为显格式，空间推进精度为一阶精度；
+                             当ALFA=1.0时，离散为完全隐格式，空间推进精度为一阶精度；
+                             当ALFA=0.5时，离散为C-N格式，空间推进精度为二阶精度；
+                             
+METHOD_RAY_TRACING      :    射线追踪方法（0或1）
+                     0  :    Euler方法
+                     1  :    四阶四步龙格库塔方法
+                     
+METHOD_BURGERS          :    算子分裂法（1或2）
+                     1  :    operator splitting，1阶
+                     2  :    Strang operator splitting，2阶
+
+=====HOWARD=====FORE_EXTENSION_HOWARD=====REAR_EXTENSION_HOWARD=====
+HOWARD                  :    是否采用HOWARD方程，即是否考虑大气湍流效应（0或1）
+                     0  :    不考虑大气湍流效应，不进行HOWARD方程求解，之后的参数不起作用
+                     1  :    考虑大气湍流效应，表示需要进行湍流场生成
+                     
+EFFECTS                 :    八位二进制数，前四位与BURGERS描述的含义相同。描述在HOWARD方程求解时考虑的效应
+              00001000  :    只考虑衍射项
+              00000100  :    只考虑轴向输运项
+              00000010  :    只考虑横向输运项
+              00000001  :    只考虑温度脉动效应项
+                             所描述的八位二进制数可组合（例如，11111100，表示考虑BURGERS中描述的所有效应+衍射效应和轴向输运项）
+
+FORE_EXTENSION_HOWARD   :    在准备进行HOWARD方程求解时，初始化输入波形向前延伸的长度占输入信号长度的比例
+REAR_EXTENSION_HOWARD   :    在准备进行HOWARD方程求解时，初始化输入波形向后延伸的长度占输入信号长度的比例
+
+
+=====ABL HIGHT (m)=====TURBULENCE Y (m)=====TURBULENCE X (m)=====DISC H=====DISC Y=====DISC X=====
+ABL HIGHT (m)           :    大气边界层范围，单位（m）
+TURBULENCE Y (m)        :    水平面内垂直于飞行方向上的湍流场范围，单位（m）
+TURBULENCE X (m)        :    沿飞机飞行方向上的湍流场范围，单位（m）；在二维HOWARD方程中不起作用
+DIM H                   :    生成湍流场时，沿高度方向上的离散点数；目前不起作用
+DIM Y                   :    生成湍流场时，沿Y方向上的离散点数；目前不起作用
+DIM X                   :    生成湍流场时，沿X方向上的离散点数；目前不起作用
+
+=====FOURIER MODE=====RANDOM=====HOMOGENEITY=====ENERGY SPECTRUM=====
+FOURIER MODE            :    生成湍流场时，所用Fourier模态数量
+RANDOM                  :    生成湍流场时，随机种子是否打开（0否，1是）
+HOMOGENEITY             :    生成湍流的均匀性（0或1）
+                     0  :    大气湍流具有分层特征
+                     1  :    大气湍流为均匀各向同性
+                     
+ENERGY SPECTRUM         :    生成湍流场时，采用的方法（0，1）
+                     0  :    modified von Karman energy spectrum
+                     1  :    Gaussian energy spectrum （目前没有添加）
+
+=====WIND FLUCTUATION(m/s)=====TEMPERATURE FLUCTUATION(K)=====TURBULENCE OUTER=====
+***说明***              :    这三个参数的意义与 HOMOGENEITY 参数相关
+HOMOGENEITY = 1 时      :
+WIND FLUCTUATION(m/s)   :    生成湍流场时，风速浮动标准差
+TEMPERATURE --
+     FLUCTUATION(K)     :    生成湍流场时，温度浮动标准差
+TURBULENCE OUTER        :    生成湍流场时，外层湍流尺度
+                        :    生成湍流场时，内层湍流尺度 TURBULENCE INNER 由运动粘性系数和湍动能耗散率确定
+                        :    
+                        :    波数k的取值范围为[0.5*K_Emax,K_m]，对数分布；其中，K_m为 Kolmogorov microscales 下的 K
+
+HOMOGENEITY = 0 时      :
+WIND FLUCTUATION(m/s)   :    摩擦速度（the friction velocity u*）
+TEMPERATURE --
+     FLUCTUATION(K)     :    温标T*
+TURBULENCE OUTER        :    Monin-Obukhov长度
+
+=====DISC S (m)=====DISC Y (m)=====DIFFRACTION=====
+DISC S (m)              :    HOWARD方程求解过程中，沿S方向上的分别率，最大空间间隔（单位，m）
+DISC Y (m)              :    HOWARD方程求解过程中，沿横向Y方向的分辨率，最大横向空间间隔（单位，m）
+DIFFRACTION             :    HOWARD方程求解过程中，衍射项的求解方法，取值为0、1、2，推荐取2
+                     0  :    差分方法求解，已添加（实际为求解的KZK方程的衍射项）
+                     1  :    二维FFT变换方法，采用的函数库是开源的fortran程序
+                     2  :    二维FFT变换方法，采用的函数库是FFTW，因无windows系统下的fortran库，目前只能在Linux系统下运行；FFTW函数库运行速度快，如果采用FFT变换，推荐使用2
+
+=====IWRITE====INTERVAL=====
+     IWRITE             :    输出设置
+                     0  :    默认设置，只输出远场结果
+                     1  :    输出Burgers方程传播时的中间结果
+                     2  :    输出HOWARD方程传播时的中间结果
+                  其他  :    只输出远场结果
+     INTERVAL           :    只在输出中间结果时，表示传播过程中每隔多少步输出一个结果
+
+=====ADJOINT BURGERS=====OBJECTIVE FUNCTION=====
+     ADJOINT BURGERS    :    是否采用伴随（adjoint）方法求解Burgers方程的梯度
+                     0  :    否
+                     1  :    是
+     OBJECTIVE FUNCTION :    所要求解的目标函数形式
+                    <0  :    从文件中读取用户自定义目标函数对远场波形的偏导数（由用户提供用户自定义目标函数的运行命令及文件名）
+                     0  :    远场波形的PLdB
+                     1  :    远场波形的ASEL
+                     2  :    远场波形的CSEL
+                     
+=====run command and out filename to obtain objective and partial(obj)/partial(farfield)=====
+只有参数 OBJECTIVE FUNCTION < 0 时才会起作用。
+共两行信息，每行字符串长度不超过128：
+第一行：用户提供的计算自定义目标函数对远场波形偏导数的运行命令，如：partial_obj_farfield.exe, cd objective && partial_obj_farfield.exe 等
+第二行：自定义目标函数对远场波形的偏导数文件名，如：PARTIAL_OBJ_FARFIELD.DAT, ./objective/PARTIAL_OBJ_FARFIELD.DAT 等

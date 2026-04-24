@@ -1,0 +1,15 @@
+﻿Case name                                                                                                                    
+Tu144                                                                                                                           
+2Ma_AOA0                                                                                                                        
+====Mach Number====AOA (deg)====Height (m)====Density (kg/m³)====Pressure (Pa)====ROVERL====PHI (deg)====                      
+        1.8             3.85       18000         0.121647           7565.23          3          0.                           
+====Aircraft Length (m)====Model Length(m)====aircraft height(m)===half reference area(m^2)                                     
+          72           72                     4             300.6                                  
+====cut section number=====                                                                                                     
+                0                                                                                                               
+====cut y position=======                                                                                                       
+3.0  6.0   9.0                                                                                                                  
+====Area_Num_Interpolation====NX_Nearfield====                                                                                  
+                     40                              500                                                                        
+====volume or lift or area=====predict or design====                                                                            
+2            1

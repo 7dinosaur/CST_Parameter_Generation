@@ -1,3 +1,6 @@
+import calendar
+import re
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -64,7 +67,7 @@ class Aircraft:
 
         for j in range(self.origin_para.shape[1]-1):
             full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
-            kind = 'linear' if j == ori_para.shape[1]-5 else 'quadratic'
+            kind = 1 if j == ori_para.shape[1]-5 else 2
             f = si.interp1d(full_y_list, full_mesh_para, kind=kind)
             para = f(full_y).reshape([-1,1])
             full_para = np.append(full_para, para, axis=1)
@@ -182,7 +185,6 @@ class Aircraft:
         """simple_mesh只有两个dom,上下表面"""
         this_para = self.interp_para(num_span) ##网格展向尺度由插值后的参数列表长度决定
         mesh = np.zeros([2, num_span, num_chord, 3])
-        order = self.cst_order
 
         for idx, data in enumerate(this_para):
             mesh[:, idx, :, 1] = data[0]
@@ -541,7 +543,7 @@ class Aircraft:
         return max(passengers)
     
     def if_smooth(self, fig = False):
-        mesh = self.gene_simple_mesh(41, 31)
+        mesh = self.air_mesh
         if fig:
             plt.figure(figsize=(16, 5))
         n_turn_u = 0.
@@ -573,10 +575,10 @@ class Aircraft:
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
         
-        return n_turn_u, n_turn_l
+        return [n_turn_u, n_turn_l]
     
     def if_smooth_new(self, fig = False):
-        mesh = self.gene_simple_mesh(41, 31)
+        mesh = self.air_mesh
         u_line1 = []; u_line2 = []; l_line1 = []; l_line2 = []
         if fig:
             plt.figure(figsize=(16, 5))
@@ -593,47 +595,16 @@ class Aircraft:
         line = [np.array(line) for line in [u_line1, u_line2, l_line1, l_line2]]
         for l in line:
             plt.plot(l[:, 0], l[:, 1])
-        # for i in range(1, 3):
-        #     line_u = mesh[0, :, i*10]
-        #     line_l = mesh[1, :, i*10]
-        #     deri_u = np.gradient(line_u[:, 2], line_u[:, 1])
-        #     deri_l = np.gradient(line_l[:, 2], line_l[:, 1])
-        #     deri2_u = np.gradient(deri_u, line_u[:, 1])
-        #     deri2_l = np.gradient(deri_l, line_l[:, 1])
-        #     for i in range(len(deri2_u)-1):
-        #         if (deri2_u[i] * deri2_u[i+1] < 0):
-        #             n_turn_u += 1
-        #         if (deri2_l[i] * deri2_l[i+1] < 0):
-        #             n_turn_l += 1
-        #     if fig:
-        #         plt.subplot(1, 3, 1)
-        #         plt.plot(line_u[:, 1], line_u[:, 2])
-        #         plt.plot(line_l[:, 1], line_l[:, 2])
-        #         plt.subplot(1, 3, 2)
-        #         plt.plot(line_u[:, 1], deri_u)
-        #         plt.plot(line_l[:, 1], deri_l)
-        #         plt.subplot(1, 3, 3)
-        #         plt.plot(line_u[:, 1], deri2_u)
-        #         plt.plot(line_l[:, 1], deri2_l)
         
         return n_turn_u, n_turn_l
 
     def Laplace(self) -> list[float]:
-        span, chord = 61, 61
-        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
+        mesh_u, mesh_l = self.air_mesh[0], self.air_mesh[1]
 
         laplace_norm_u = self.Laplace_single(mesh_u)
         laplace_norm_l = self.Laplace_single(mesh_l)
 
         return [laplace_norm_u, laplace_norm_l]
-    
-    def Laplace_panel(self) -> list[float]:
-        panel_mesh = self.gene_panel_mesh(0)
-        laplace_norms = []
-        for dom in panel_mesh:
-            laplace_norms.append(self.Laplace_single(dom))
-
-        return laplace_norms
     
     def Laplace_single(self, mesh) -> float:
 
@@ -665,51 +636,33 @@ class Aircraft:
 
         return laplace_norm
     
-    def Laplace_seperate(self) -> list[float]:
-        span, chord = 121, 61
-        mesh_u, mesh_l = self.gene_simple_mesh(span, chord)
+    def search_cabin(self):
+        mesh = self.air_mesh.reshape([-1, 3])
+        total_p = mesh.shape[0]
+        chaos = 0
+        ## 定义客舱尺寸，展向有微量收缩作为容差
+        cabin_top = 1.55; cabin_height = 2.0
+        cabin_begin = 22; cabin_len = 40*0.97; cabin_half_width = (4*0.55+0.5)/2; tol = 0.05
+        cabin_end = cabin_begin + cabin_len; cabin_ground = cabin_top - cabin_height
+        for point in mesh:
+            if (point[0] > cabin_begin) and (point[0] < cabin_end):
+                if (point[1] < cabin_half_width):
+                    l_edge = cabin_ground + tol * (point[1]/cabin_half_width)
+                    u_edge = cabin_top - tol * (point[1]/cabin_half_width)
+                    if (point[2] < u_edge) and (point[2] > l_edge):
+                        chaos += 1
 
-        span_laplace_u = np.zeros_like(mesh_u)
-        chord_laplace_u = np.zeros_like(mesh_u)
-        span_laplace_l = np.zeros_like(mesh_l)
-        chord_laplace_l = np.zeros_like(mesh_l)
-
-        # ===== 中间区域 (有上下左右四个邻居) =====
-        ##span方向laplace, 第一个维度代表span, 所以在第一个维度作差值, 不做差值的维度应该置1:-1
-        center_u = (
-            mesh_u[:-2, 1:-1] + mesh_u[2:, 1:-1]
-        ) / 2.0
-
-        center_l = (
-            mesh_l[:-2, 1:-1] + mesh_l[2:, 1:-1]
-        ) / 2.0
-
-        span_laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
-        span_laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
-
-        ##chord方向laplace, 第一个维度代表span, 所以在第二个维度作差值
-        center_u = (
-            mesh_u[1:-1, :-2] + mesh_u[1:-1, 2:]
-        ) / 2.0
-
-        center_l = (
-            mesh_l[1:-1, :-2] + mesh_l[1:-1, 2:]
-        ) / 2.0
-
-        chord_laplace_u[1:-1, 1:-1] = mesh_u[1:-1, 1:-1] - center_u
-        chord_laplace_l[1:-1, 1:-1] = mesh_l[1:-1, 1:-1] - center_l
-
-        span_laplace_u_norm = np.sum(span_laplace_u ** 2)
-        chord_laplace_u_norm = np.sum(chord_laplace_u ** 2)
-        span_laplace_l_norm = np.sum(span_laplace_l ** 2)
-        chord_laplace_l_norm = np.sum(chord_laplace_l ** 2)
-
-        return [span_laplace_u_norm, chord_laplace_u_norm, span_laplace_l_norm, chord_laplace_l_norm]
+        if chaos/total_p < 0.01:
+            return True
+        else:
+            return False
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    bwb0.read_from_csv(r"mesh_para\tmp_bwb.csv")
-    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.9)
+    bwb0.read_from_csv(r"mesh_para\40plus4_bwb.csv")
+    bwb0.gene_simple_mesh(41, 41)
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0.0)
+    bwb0.write_mesh("simple", "origin.x")
     # bwb0.export_airfoil_profiles()
     bwb0.gene_mesh_for_SU2("geo.x", 0.0)
     # new_para = bwb0.reassign_cst_order(4)
@@ -719,6 +672,7 @@ if __name__ == "__main__":
     print(bwb0.cal_volume())
     print(bwb0.Laplace())
     print(bwb0.if_smooth(fig=True))
+    print(bwb0.search_cabin())
     n_span = 8
     para0 = bwb0.interp_para(n_span)
     # pd.DataFrame(para0).to_csv(r"mesh_para\\tmp_bwb.csv", index=False)
