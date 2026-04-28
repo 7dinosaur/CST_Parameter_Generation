@@ -43,9 +43,9 @@ def fit_cst_airfoil(target_u, target_l, order=4, N1=0.5, N2=1):
     输出：para 完整参数数组 → 可直接传入你的 cst_rec()
     """
     x = np.linspace(target_u[0, 0], target_u[-1, 0], 60)
-    f = scipy.interpolate.interp1d(target_u[:, 0], target_u[:, 1], kind=1)
+    f = scipy.interpolate.interp1d(target_u[:, 0], target_u[:, 1], kind=4)
     target_u = np.array([x, f(x)]).T
-    f = scipy.interpolate.interp1d(target_l[:, 0], target_l[:, 1], kind=1)
+    f = scipy.interpolate.interp1d(target_l[:, 0], target_l[:, 1], kind=4)
     target_l = np.array([x, f(x)]).T
     # plt.scatter(target_u[:, 0], target_u[:, 1])
     # plt.scatter(target_l[:, 0], target_l[:, 1])
@@ -134,11 +134,11 @@ def opt(cst):
 
 if __name__ == "__main__":
     extra_para = [0., 72.0, 0, 0.0208, 0.0208]
-    n = 20
+    n = 7
     target_u = np.array([[0.0, 0.0]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), 1.55] for i in range(n)] + [[72.0, 1.05]])
     target_l = np.array([[0.0, 0.0]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), -0.65] for i in range(n)] + [[72.0, 1.05]])
-    target_u = np.array([[5.0, 0.2]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), 1.55] for i in range(n)] + [[70.0, 1.05]])
-    target_l = np.array([[5.0, 0.2]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), -0.45] for i in range(n)] + [[70.0, 1.05]])
+    # target_u = np.array([[5.0, 0.2]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), 1.55] for i in range(n)] + [[70.0, 1.05]])
+    # target_l = np.array([[5.0, 0.2]] + [[round(22 + i * (60.08 - 20) / (n-1), 2), -0.45] for i in range(n)] + [[70.0, 1.05]])
 
     # z_off = 0
     # sec_2 = np.array([10.0, z_off]); sec_2_end = np.array([70.0, 1.05])
@@ -174,6 +174,7 @@ if __name__ == "__main__":
     # para = np.concatenate([[0.], result.x, extra_para], axis=0)
     print(para)
     coord_u, coord_l = cst_rec(para)
+    plt.figure(figsize=(15, 8))
     plt.plot(coord_u[:, 0], coord_u[:, 1])
     plt.plot(coord_l[:, 0], coord_l[:, 1])
     plt.show()
