@@ -1,6 +1,3 @@
-import calendar
-import re
-
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -200,11 +197,12 @@ class Aircraft:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """panel_mesh是可以直接输入faboom程序计算的分块网格"""
         def redistribution(x, y, n):
+            y = self._smooth_1d(y, window=3)
             xtmp = np.linspace(x[0], x[-1], 100)
-            x = np.append(-np.array(x)[1:][::-1], np.array(x))
-            y = np.append(np.array(y)[1:][::-1], np.array(y))
+            x_full = np.append(-np.array(x)[1:][::-1], np.array(x))
+            y_full = np.append(np.array(y)[1:][::-1], np.array(y))
 
-            fx = si.Akima1DInterpolator(x, y)
+            fx = si.Akima1DInterpolator(x_full, y_full)
 
             y_tmp = fx(xtmp)
             L = np.zeros(100)
@@ -218,7 +216,7 @@ class Aircraft:
             L_pingjun = []
             for i in range(n):
                 L_pingjun.append(dL*i)
-            x_pingjun = np.append(L_inv(L_pingjun[:-1]), x[-1])
+            x_pingjun = np.append(L_inv(L_pingjun[:-1]), x_full[-1])
             y_pingjun = fx(x_pingjun)
 
             return x_pingjun, y_pingjun
@@ -281,6 +279,8 @@ class Aircraft:
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
             dom2[i+1] = new_coords
         dom2 = dom2[:, ::-1]
+        self._laplacian_smooth(dom1, n_iter=2, relax=0.2)
+        self._laplacian_smooth(dom2, n_iter=2, relax=0.2)
         #===================================#
 
         ##机身网格计算
@@ -312,6 +312,8 @@ class Aircraft:
             new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], body_j)
             dom4[i] = new_coords
         dom4 = dom4[:, ::-1]
+        self._laplacian_smooth(dom3, n_iter=2, relax=0.2)
+        self._laplacian_smooth(dom4, n_iter=2, relax=0.2)
         #===================================#
 
         ##机翼网格计算
@@ -336,6 +338,8 @@ class Aircraft:
             dom7[:, j, 1] = y
             dom7[:, j, [0, 2]] = wing_l.T
         dom7 = dom7[:, ::-1]
+        self._laplacian_smooth(dom6, n_iter=1, relax=0.15)
+        self._laplacian_smooth(dom7, n_iter=1, relax=0.15)
         #===================================#
 
         ##尾部网格计算
@@ -389,7 +393,6 @@ class Aircraft:
         panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)] ##由于分块网格长度尺度不统一用列表存储
 
         return panel_mesh
-
     
     def write_mesh(self, mesh_type:str = "panel", file_path:str = "geo.x", aoa = 3.0) -> None:
         """自动识别网格类型并写入文件"""
@@ -548,12 +551,12 @@ class Aircraft:
         return max(passengers)
     
     def if_smooth(self, fig = False):
-        mesh = self.gene_simple_mesh(81, 51)
+        mesh = self.air_mesh
         if fig:
             plt.figure(figsize=(16, 5))
         n_turn_u = 0.
         n_turn_l = 0.
-        for i in range(6):
+        for i in range(4):
             line_u = mesh[0, :, i*10]
             line_l = mesh[1, :, i*10]
             deri_u = np.gradient(line_u[:, 2], line_u[:, 1])
@@ -580,7 +583,7 @@ class Aircraft:
                 plt.plot(line_u[:, 1], deri2_u)
                 plt.plot(line_l[:, 1], deri2_l)
         
-        return np.array([n_turn_u, n_turn_l])
+        return [n_turn_u, n_turn_l]
     
     def if_smooth_new(self, fig = False):
         mesh = self.air_mesh
@@ -641,6 +644,31 @@ class Aircraft:
 
         return laplace_norm
     
+    def _laplacian_smooth(self, mesh: ndarray, n_iter: int = 2, relax: float = 0.25) -> ndarray:
+        """边界保持的Laplacian光顺，仅移动内部节点"""
+        ni, nj = mesh.shape[0], mesh.shape[1]
+        for _ in range(n_iter):
+            old = mesh.copy()
+            avg = (old[2:, 1:-1] + old[:-2, 1:-1] + old[1:-1, 2:] + old[1:-1, :-2]) / 4.0
+            mesh[1:-1, 1:-1] += relax * (avg - old[1:-1, 1:-1])
+        return mesh
+
+    @staticmethod
+    def _smooth_1d(y: ndarray, window: int = 5) -> ndarray:
+        """一维保端点高斯平滑，用于消除插值波纹"""
+        if len(y) < window:
+            return y
+        half = window // 2
+        sigma = window / 4.0
+        x_k = np.arange(window) - half
+        kernel = np.exp(-0.5 * (x_k / sigma) ** 2)
+        kernel /= kernel.sum()
+        y_pad = np.pad(y, (half, half), mode='edge')
+        result = np.convolve(y_pad, kernel, mode='valid')
+        result[:half] = y[:half]
+        result[-half:] = y[-half:]
+        return result
+
     def search_cabin(self):
         mesh = self.air_mesh.reshape([-1, 3])
         total_p = mesh.shape[0]
@@ -663,10 +691,9 @@ class Aircraft:
             return False
 
 if __name__ == "__main__":
+    print("我没死")
     bwb0 = Aircraft()
-    base_para = pd.read_csv(r"database\\smooth_history.csv", header=None).to_numpy()[-1].reshape([6, 18])
-    bwb0.read_from_csv(r"mesh_para\tmp_bwb.csv")
-    # bwb0 = Aircraft(base_para)
+    bwb0.read_from_csv(r"mesh_para\new_sbwb.csv")
     bwb0.gene_simple_mesh(41, 41)
     bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0.0)
     bwb0.write_mesh("simple", "origin.x")

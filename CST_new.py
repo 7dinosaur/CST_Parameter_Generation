@@ -145,7 +145,7 @@ if __name__ == "__main__":
     y_list = np.sort(y_list)
     print(y_list)
     mesh_para = []
-    for y in y_list[6:8]:
+    for y in y_list:
         data = np.loadtxt(f'{folder_path}\\y={y}.dat')
         cst_order = 5
         N1 = 0.5
