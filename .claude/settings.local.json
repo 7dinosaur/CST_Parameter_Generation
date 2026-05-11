@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"import py_compile; py_compile.compile\\('aircraft_gene_2.py', doraise=True\\); print\\('Syntax OK'\\)\")",
-      "Bash(/e/Anaconda3/envs/p314/python.exe aircraft_gene_2.py)"
-    ]
-  }
-}
