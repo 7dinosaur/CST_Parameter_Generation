@@ -180,7 +180,7 @@ class Aircraft:
         
         return new_origin_para
 
-    def gene_simple_mesh(self, num_span, num_chord) -> ndarray:
+    def gene_simple_mesh(self, num_span=81, num_chord=120, aoa=0.0) -> ndarray:
         """生成三维网格数组,第一维为dom编号,如aircraft[0]=dom1,二三维为ij方向,四维[x,y,z]"""
         """simple_mesh只有两个dom,上下表面"""
         this_para = self.interp_para(num_span) ##网格展向尺度由插值后的参数列表长度决定
@@ -191,6 +191,14 @@ class Aircraft:
             coord_u, coord_l = self.cst_rec(data, self.N1, self.N2, num_chord)
             mesh[0, idx, :, [0, 2]] = coord_u
             mesh[1, idx, :, [0, 2]] = coord_l
+
+        ## 旋转网格
+        theta = np.radians(-aoa)
+        c, s = np.cos(theta), np.sin(theta)
+        x, z = mesh[..., 0], mesh[..., 2]
+        mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
+        # print(f"攻角为{aoa}")
+
 
         self.air_mesh = mesh
 
@@ -391,12 +399,373 @@ class Aircraft:
         return panel_mesh
 
     
+    def gene_simple_mesh_nurbs(self, num_span=81, num_chord=120, aoa=0.0) -> ndarray:
+        """基于NURBS(B样条)曲面生成简单网格,通过张量积B样条拟合翼型截面"""
+        # 数据截面分辨率 (足够捕获曲面特征,同时避免过拟合)
+        data_span = max(min(num_span, 30), 10)
+        data_chord = max(min(num_chord, 60), 20)
+
+        this_para = self.interp_para(data_span)
+
+        # 参数空间: u=弦向[0,1], v=展向[0,1]
+        u_data = np.linspace(0, 1, data_chord)
+        v_data = np.linspace(0, 1, data_span)
+
+        # 构建数据矩阵 z[i,j] = f(u[i], v[j])
+        xu_data = np.zeros((data_chord, data_span))
+        zu_data = np.zeros((data_chord, data_span))
+        xl_data = np.zeros((data_chord, data_span))
+        zl_data = np.zeros((data_chord, data_span))
+
+        for j, data in enumerate(this_para):
+            coord_u, coord_l = self.cst_rec(data, self.N1, self.N2, data_chord)
+            xu_data[:, j] = coord_u[0, :]
+            zu_data[:, j] = coord_u[1, :]
+            xl_data[:, j] = coord_l[0, :]
+            zl_data[:, j] = coord_l[1, :]
+
+        # 拟合B样条曲面 (NURBS权因子均为1)
+        kx = ky = 3
+        spline_xu = si.RectBivariateSpline(u_data, v_data, xu_data, kx=kx, ky=ky, s=0)
+        spline_zu = si.RectBivariateSpline(u_data, v_data, zu_data, kx=kx, ky=ky, s=0)
+        spline_xl = si.RectBivariateSpline(u_data, v_data, xl_data, kx=kx, ky=ky, s=0)
+        spline_zl = si.RectBivariateSpline(u_data, v_data, zl_data, kx=kx, ky=ky, s=0)
+
+        # 评估网格
+        mesh = np.zeros([2, num_span, num_chord, 3])
+        u_eval = np.linspace(0, 1, num_chord)
+        v_eval = np.linspace(0, 1, num_span)
+        y_eval = np.linspace(this_para[0, 0], this_para[-1, 0], num_span)
+
+        xu_grid = spline_xu(u_eval, v_eval, grid=True)
+        zu_grid = spline_zu(u_eval, v_eval, grid=True)
+        xl_grid = spline_xl(u_eval, v_eval, grid=True)
+        zl_grid = spline_zl(u_eval, v_eval, grid=True)
+
+        for j in range(num_span):
+            mesh[0, j, :, 0] = xu_grid[:, j]
+            mesh[0, j, :, 1] = y_eval[j]
+            mesh[0, j, :, 2] = zu_grid[:, j]
+            mesh[1, j, :, 0] = xl_grid[:, j]
+            mesh[1, j, :, 1] = y_eval[j]
+            mesh[1, j, :, 2] = zl_grid[:, j]
+
+        # 旋转攻角
+        theta = np.radians(-aoa)
+        c, s = np.cos(theta), np.sin(theta)
+        x, z = mesh[..., 0], mesh[..., 2]
+        mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
+
+        self.air_mesh = mesh
+        return mesh
+
+    def gene_panel_mesh_nurbs(self, aoa:float = 3.0, shape = [31, 60, 10, 8, 27]) -> list[ndarray]:
+        """基于NURBS曲面生成分块网格,可输入faboom程序计算"""
+        """前后缘引导线沿用插值策略,剖面之间曲面由NURBS生成"""
+        def redistribution(x, y, n):
+            xtmp = np.linspace(x[0], x[-1], 100)
+            x = np.append(-np.array(x)[1:][::-1], np.array(x))
+            y = np.append(np.array(y)[1:][::-1], np.array(y))
+
+            fx = si.Akima1DInterpolator(x, y)
+
+            y_tmp = fx(xtmp)
+            L = np.zeros(100)
+            for i in range(100 - 1):
+                dx = xtmp[i+1] - xtmp[i]
+                dy = y_tmp[i+1] - y_tmp[i]
+                L[i+1] = (dx**2 + dy**2)**0.5 + L[i]
+            l_total = L[-1]
+            L_inv = si.interp1d(L, xtmp, kind='quadratic')
+            dL = l_total/(n-1)
+            L_pingjun = []
+            for i in range(n):
+                L_pingjun.append(dL*i)
+            x_pingjun = np.append(L_inv(L_pingjun[:-1]), x[-1])
+            y_pingjun = fx(x_pingjun)
+
+            return x_pingjun, y_pingjun
+
+        this_para = self.interp_para(62)
+        order = self.cst_order
+
+        # ============ 统一网格尺度设置 ============
+        nose_i, body_i, tail_i = shape[0], shape[1], shape[2]
+        nose_j = body_j = tail_j = shape[3]
+        wing_i = body_i
+        wing_j = shape[4]
+
+        # NURBS数据分辨率 (高于目标网格以保证拟合精度)
+        data_i_nose = min(nose_i * 2, 50)
+        data_j_nose = min(nose_j * 3, 24)
+        data_i_body = min(body_i * 2, 80)
+        data_j_body = min(body_j * 3, 24)
+        data_i_wing = min(wing_i * 2, 80)
+        data_j_wing = max(wing_j, 30)
+
+        # ============ 初始化所有块 ============
+        dom1, dom2 = np.zeros([nose_i, nose_j, 3]), np.zeros([nose_i, nose_j, 3])
+        dom3, dom4 = np.zeros([body_i, body_j, 3]), np.zeros([body_i, body_j, 3])
+        dom5 = np.zeros([body_i, 2, 3])
+        dom6, dom7 = np.zeros([wing_i, wing_j-1, 3]), np.zeros([wing_i, wing_j, 3])
+        dom8 = np.zeros([body_i, 2, 3])
+        dom9, dom10 = np.zeros([tail_i, tail_j, 3]), np.zeros([tail_i, tail_j, 3])
+        dom11 = np.zeros([tail_j, 2, 3])
+        dom12 = np.zeros([tail_i, 2, 3])
+
+        # ============ 分块逻辑: 前缘引导线及切分点 ============
+        leading_edge_x = this_para[:, 2*order+3]
+        leading_edge_y = this_para[:, 0]
+        leading_edge_z = this_para[:, 2*order+5]
+        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
+        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
+        leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
+        mask = (leading_edge_x > 3)&(leading_deri > 0.12)&(leading_edge_y > 3.2)
+        idx = np.argmax(mask)
+        dom1_end = leading_edge_x[idx]
+        dom1_start = leading_edge_x[0]
+
+        delta_y = this_para[1, 0] - this_para[0, 0]
+
+        # ============ 机头网格 (dom1, dom2): NURBS拟合 ============
+        x_list_nose = np.linspace(dom1_start, dom1_end, nose_i)
+
+        # 生成高分辨率数据,跳过展向站点不足的退化位置
+        x_data_all = np.linspace(dom1_start, dom1_end, data_i_nose)
+        v_data_nose = np.linspace(0, 1, data_j_nose)
+
+        y_data_list, zu_data_list, zl_data_list, u_data_list = [], [], [], []
+        for x in x_data_all:
+            this_y_end = f_leading_xy(x)
+            this_z_end = f_leading_xz(x)
+            mask_p = this_para[:, 0] < this_y_end - 0.1*delta_y
+            if np.sum(mask_p) < 2:  # 展向站点不足(靠近机头退化点)
+                continue
+            tmp_para = this_para[mask_p].copy()
+            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
+            coords_this[:, 0] = x
+            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
+            for k, da in enumerate(tmp_para):
+                psi_end = (x - da[-5])/(da[-4] - da[-5])
+                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
+                coords_this[k, 2] = z_u[1, -1]
+                coords_this[k, 3] = z_l[1, -1]
+            coords_this[-1, 2] = this_z_end
+            coords_this[-1, 3] = this_z_end
+            y_j, zu_j = redistribution(coords_this[:, 1], coords_this[:, 2], data_j_nose)
+            _, zl_j = redistribution(coords_this[:, 1], coords_this[:, 3], data_j_nose)
+            y_data_list.append(y_j)
+            zu_data_list.append(zu_j)
+            zl_data_list.append(zl_j)
+            u_data_list.append((x - dom1_start) / (dom1_end - dom1_start))
+
+        u_data_nose = np.array(u_data_list)
+        y_data_nose = np.array(y_data_list)
+        zu_data_nose = np.array(zu_data_list)
+        zl_data_nose = np.array(zl_data_list)
+
+        spline_y_n  = si.RectBivariateSpline(u_data_nose, v_data_nose, y_data_nose,  kx=3, ky=3, s=0)
+        spline_zu_n = si.RectBivariateSpline(u_data_nose, v_data_nose, zu_data_nose, kx=3, ky=3, s=0)
+        spline_zl_n = si.RectBivariateSpline(u_data_nose, v_data_nose, zl_data_nose, kx=3, ky=3, s=0)
+
+        u_eval_nose = np.linspace(0, 1, nose_i)
+        v_eval_nose = np.linspace(0, 1, nose_j)
+        y_grid_n = spline_y_n(u_eval_nose, v_eval_nose, grid=True)
+        zu_grid_n = spline_zu_n(u_eval_nose, v_eval_nose, grid=True)
+        zl_grid_n = spline_zl_n(u_eval_nose, v_eval_nose, grid=True)
+
+        for i in range(nose_i):
+            dom1[i, :, 0] = dom2[i, :, 0] = x_list_nose[i]
+        dom1[0, :, 1] = dom2[0, :, 1] = this_para[0, 0]
+        dom1[0, :, 2] = dom2[0, :, 2] = this_para[0, -3]
+        dom1[1:, :, 1] = y_grid_n[1:, :]
+        dom1[1:, :, 2] = zu_grid_n[1:, :]
+        dom2[1:, :, 1] = y_grid_n[1:, :]
+        dom2[1:, :, 2] = zl_grid_n[1:, :]
+        dom2 = dom2[:, ::-1]
+        # 记录翼身交界面y坐标(沿用原始插值策略保证分块一致性)
+        this_y_end = f_leading_xy(dom1_end)
+
+        # ============ 机身网格 (dom3, dom4): NURBS拟合 ============
+        x_begin = dom1_end
+        trailing_edge_x = this_para[:, -4]
+        f_trailing_yx = si.interp1d(this_para[:, 0], trailing_edge_x, kind='quadratic')
+        x_end = f_trailing_yx(this_y_end)
+        x_list_body = np.linspace(x_begin, x_end, body_i)
+
+        wing_line = self.interp_single_para(this_y_end)
+        end_u_full, end_l_full = self.cst_rec(wing_line, self.N1, self.N2, data_i_body)
+
+        x_data_body = np.linspace(x_begin, x_end, data_i_body)
+        v_data_body = np.linspace(0, 1, data_j_body)
+
+        y_data_b, zu_data_b, zl_data_b, u_data_b_list = [], [], [], []
+        for i, x in enumerate(x_data_body):
+            mask_p = this_para[:, 0] < this_y_end - 0.1*delta_y
+            tmp_para = this_para[mask_p].copy()
+            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
+            coords_this[:, 0] = x
+            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
+            for k, da in enumerate(tmp_para):
+                psi_end = (x - da[-5])/(da[-4] - da[-5])
+                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
+                coords_this[k, 2] = z_u[1, -1]
+                coords_this[k, 3] = z_l[1, -1]
+            coords_this[-1, 2] = end_u_full[1, i]
+            coords_this[-1, 3] = end_l_full[1, i]
+            y_j, zu_j = redistribution(coords_this[:, 1], coords_this[:, 2], data_j_body)
+            _, zl_j = redistribution(coords_this[:, 1], coords_this[:, 3], data_j_body)
+            y_data_b.append(y_j)
+            zu_data_b.append(zu_j)
+            zl_data_b.append(zl_j)
+            u_data_b_list.append((x - x_begin) / (x_end - x_begin))
+
+        u_data_body = np.array(u_data_b_list)
+        y_data_b = np.array(y_data_b)
+        zu_data_b = np.array(zu_data_b)
+        zl_data_b = np.array(zl_data_b)
+
+        spline_y_b  = si.RectBivariateSpline(u_data_body, v_data_body, y_data_b,  kx=3, ky=3, s=0)
+        spline_zu_b = si.RectBivariateSpline(u_data_body, v_data_body, zu_data_b, kx=3, ky=3, s=0)
+        spline_zl_b = si.RectBivariateSpline(u_data_body, v_data_body, zl_data_b, kx=3, ky=3, s=0)
+
+        u_eval_body = np.linspace(0, 1, body_i)
+        v_eval_body = np.linspace(0, 1, body_j)
+        y_grid_b = spline_y_b(u_eval_body, v_eval_body, grid=True)
+        zu_grid_b = spline_zu_b(u_eval_body, v_eval_body, grid=True)
+        zl_grid_b = spline_zl_b(u_eval_body, v_eval_body, grid=True)
+
+        for i in range(body_i):
+            dom3[i, :, 0] = x_list_body[i]
+            dom3[i, :, 1] = y_grid_b[i, :]
+            dom3[i, :, 2] = zu_grid_b[i, :]
+            dom4[i, :, 0] = x_list_body[i]
+            dom4[i, :, 1] = y_grid_b[i, :]
+            dom4[i, :, 2] = zl_grid_b[i, :]
+        dom4 = dom4[:, ::-1]
+
+        # ============ 机翼网格 (dom6, dom7): NURBS拟合 ============
+        mask_wing = this_para[:, 0] > this_y_end + 0.1*delta_y
+        tmp_para_wing = this_para[mask_wing].copy()
+        tmp_para_wing = np.append(wing_line.reshape([1, -1]), tmp_para_wing, axis=0)
+        tmp_para_wing = self.interp_para(data_j_wing, tmp_para_wing)
+
+        u_data_w = np.linspace(0, 1, data_i_wing)
+        v_data_w = np.linspace(0, 1, data_j_wing)
+
+        xu_data_w = np.zeros((data_i_wing, data_j_wing))
+        zu_data_w = np.zeros((data_i_wing, data_j_wing))
+        xl_data_w = np.zeros((data_i_wing, data_j_wing))
+        zl_data_w = np.zeros((data_i_wing, data_j_wing))
+
+        for j, pa in enumerate(tmp_para_wing):
+            wing_u, wing_l = self.cst_rec(pa, self.N1, self.N2, data_i_wing)
+            xu_data_w[:, j] = wing_u[0, :]
+            zu_data_w[:, j] = wing_u[1, :]
+            xl_data_w[:, j] = wing_l[0, :]
+            zl_data_w[:, j] = wing_l[1, :]
+
+        spline_xu_w = si.RectBivariateSpline(u_data_w, v_data_w, xu_data_w, kx=3, ky=3, s=0)
+        spline_zu_w = si.RectBivariateSpline(u_data_w, v_data_w, zu_data_w, kx=3, ky=3, s=0)
+        spline_xl_w = si.RectBivariateSpline(u_data_w, v_data_w, xl_data_w, kx=3, ky=3, s=0)
+        spline_zl_w = si.RectBivariateSpline(u_data_w, v_data_w, zl_data_w, kx=3, ky=3, s=0)
+
+        u_eval_w = np.linspace(0, 1, wing_i)
+        v_eval_w = np.linspace(0, 1, wing_j)
+
+        xu_grid_w = spline_xu_w(u_eval_w, v_eval_w, grid=True)
+        zu_grid_w = spline_zu_w(u_eval_w, v_eval_w, grid=True)
+        xl_grid_w = spline_xl_w(u_eval_w, v_eval_w, grid=True)
+        zl_grid_w = spline_zl_w(u_eval_w, v_eval_w, grid=True)
+
+        y_wing = np.linspace(tmp_para_wing[0, 0], tmp_para_wing[-1, 0], wing_j)
+
+        for j in range(wing_j):
+            if j <= 1:
+                dom5[:, j, 1] = y_wing[j]
+                dom5[:, j, 0] = xu_grid_w[:, j]
+                dom5[:, j, 2] = zu_grid_w[:, j]
+            if j >= 1:
+                dom6[:, j-1, 1] = y_wing[j]
+                dom6[:, j-1, 0] = xu_grid_w[:, j]
+                dom6[:, j-1, 2] = zu_grid_w[:, j]
+            if j == wing_j - 1:
+                dom8[:, :, 1] = y_wing[j]
+                dom8[:, 0, 0] = xu_grid_w[:, j]
+                dom8[:, 0, 2] = zu_grid_w[:, j]
+                dom8[:, 1, 0] = xl_grid_w[:, j]
+                dom8[:, 1, 2] = zl_grid_w[:, j]
+            dom7[:, j, 1] = y_wing[j]
+            dom7[:, j, 0] = xl_grid_w[:, j]
+            dom7[:, j, 2] = zl_grid_w[:, j]
+        dom7 = dom7[:, ::-1]
+
+        # ============ 尾部网格 (dom9, dom10): 直纹面线性插值 ============
+        x_begin_tail = x_end
+        x_end_tail = this_para[0, -4]
+        x_list_tail = np.linspace(x_begin_tail, x_end_tail, tail_i)
+        end_point, _ = self.cst_rec(this_para[0, :], self.N1, self.N2, 2)
+        end_point = np.array([x_end_tail, this_para[0, 0], end_point[-1, 1]])
+        for j in range(tail_j):
+            begin_point_up = dom3[-1, j]
+            begin_point_low = dom4[-1, j]
+            for i, x in enumerate(x_list_tail):
+                x_psi = (x - x_begin_tail)/(x_end_tail - x_begin_tail)
+                dom9[i, j, 0] = dom10[i, j, 0] = x
+                dom9[i, j, 1:] = begin_point_up[1:] + x_psi*(end_point[1:] - begin_point_up[1:])
+                dom10[i, j, 1:] = begin_point_low[1:] + x_psi*(end_point[1:] - begin_point_low[1:])
+        dom9 = dom9[:-1]
+        dom10 = dom10[:-1]
+
+        # ============ 钝底网格 (dom11) ============
+        dom11[:, 1] = dom9[-1]
+        dom11[:, 0] = dom10[-1, ::-1]
+        dom11 = dom11[::-1, ::-1]
+
+        # ============ 尾涡面网格 (dom12) ============
+        dom12[:-1, 0] = dom9[:, -1]
+        dom12[:, 1, [1, 2]] = dom5[-1, 1, [1, 2]]
+        dom12[:-1, 1, 0] = dom12[:-1, 0, 0]; dom12[-1, 1, 0] = 100
+        dom12[0, 1] = dom5[-1, 1]
+        dom12[-1, 0, [1, 2]] = dom9[-1, 1, [1, 2]]
+        dom12[-1, :, 0] = 100
+
+        # ============ 旋转网格 ============
+        theta = np.radians(-aoa)
+        c, s = np.cos(theta), np.sin(theta)
+        for dom_name in [f"dom{i}" for i in range(1, 13)]:
+            if dom_name in locals():
+                mesh = locals()[dom_name]
+                x, z = mesh[..., 0], mesh[..., 2]
+                mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
+        print(f"攻角为{aoa}")
+
+        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)]
+        return panel_mesh
+
     def write_mesh(self, mesh_type:str = "panel", file_path:str = "geo.x", aoa = 3.0) -> None:
-        """自动识别网格类型并写入文件"""
+        """自动识别网格类型并写入文件
+        mesh_type: 'simple' | 'panel' | 'simple_nurbs' | 'panel_nurbs'
+        """
         with open(file_path, 'w') as f:
             if mesh_type == "simple": #simple mesh
                 mesh = self.gene_simple_mesh(81, 120)
                 print("写入一般网格...")
+                n_dom = mesh.shape[0]
+                n_i = mesh.shape[1]
+                n_j = mesh.shape[2]
+                f.write(f"{n_dom}\n")
+                f.write(f"{n_i} {n_j} 1\n")
+                f.write(f"{n_i} {n_j} 1\n")
+                for dom in mesh:
+                    dom = dom.transpose(2, 1, 0).flatten().reshape([-1, 5])
+                    for line in dom:
+                        f.write(" ".join(f"{x:.6f}" for x in line) + "\n")
+                print(f"写入完毕,网格形状为[{n_i},{n_j}]. 网格文件路径：{file_path}")
+
+            elif mesh_type == "simple_nurbs": #simple mesh (NURBS)
+                mesh = self.gene_simple_mesh_nurbs(81, 120, aoa)
+                print("写入NURBS一般网格...")
                 n_dom = mesh.shape[0]
                 n_i = mesh.shape[1]
                 n_j = mesh.shape[2]
@@ -419,6 +788,24 @@ class Aircraft:
                 for dom in mesh:
                     dom = dom.transpose(2, 0, 1)
                     row_size = 4  # 控制每行4个元素
+                    for coord in dom:
+                        coord = coord.flatten()
+                        for i in range(0, len(coord), row_size):
+                            line_elements = coord[i:i+row_size]
+                            line_str = " ".join(f"{x:.6f}" for x in line_elements)
+                            f.write(line_str + "\n")
+                print(f"写入完毕,面元数为[{len(mesh)}]. 网格文件路径：{file_path}")
+
+            elif mesh_type == "panel_nurbs": #panel mesh (NURBS)
+                mesh = self.gene_panel_mesh_nurbs(aoa)
+                print("写入NURBS面元网格...")
+                f.write(f"{len(mesh)}\n")
+                for dom in mesh:
+                    n_i, n_j = dom.shape[1], dom.shape[0]
+                    f.write(f"{n_i} {n_j} 1\n")
+                for dom in mesh:
+                    dom = dom.transpose(2, 0, 1)
+                    row_size = 4
                     for coord in dom:
                         coord = coord.flatten()
                         for i in range(0, len(coord), row_size):
@@ -640,7 +1027,180 @@ class Aircraft:
         laplace_norm = np.sum(laplace ** 2)
 
         return laplace_norm
-    
+
+    def cal_areav(self, mach, aoa=0.0):
+        mesh = self.gene_simple_mesh(200, 600, aoa).reshape([2, -1, 3])
+        ## 沿x轴移动马赫面，直到所有网格点都在马赫面前方
+        mach_theta = np.arcsin(1/mach)
+        pres = 100
+        area_v = [[[], []] for _ in range(pres)]
+        for ch in range(2):
+            x_list = []
+            for coord in mesh[ch]:
+                if abs(coord[2]) < 1e-6:
+                    x_list.append(coord[0])
+                else:
+                    x_list.append(coord[2]/np.tan(mach_theta)+coord[0])
+            x_min, x_max = min(x_list), max(x_list)
+            # print(min(x_list), max(x_list))
+            
+            for idx, x in enumerate(x_list):
+                area_idx = int(round((x - x_min)/(x_max - x_min)*(pres-1)))
+                area_v[area_idx][ch].append(mesh[ch, idx])
+
+        area_axis = np.linspace(x_min, x_max, pres)
+        area = np.column_stack((area_axis, np.zeros_like(area_axis)))
+        for i in range(pres):
+            v_u = np.array(area_v[i][0])
+            v_l = np.array(area_v[i][1])
+            l = min(v_u.shape[0], v_l.shape[0])
+            sec = 0
+            for j in range(l):
+                try:
+                    h = (v_u[-1-j, 2] - v_l[-1-j, 2])/np.sin(mach_theta)
+                    sec += h*(v_u[-1-j, 1] - v_u[-2-j, 1])
+                except:
+                    sec += h*(v_l[-1-j, 1])
+                
+            area[i, 1] = sec
+
+        # print("体积等效截面积", area[:, 1].sum())
+        true_v = np.loadtxt(r"FABOOM_test\area\Area_due_to_Volume.dat", skiprows=1)
+        plt.plot(true_v[:, 0], true_v[:, 1], label="True Area")
+        plt.plot(area[:, 0], area[:, 1])
+
+        # np.savetxt("test_area.dat", area)
+
+        return area[:, 1].sum()
+
+    def cal_areav_2(self, mach, aoa=0.0, n_span=200, n_chord=600, n_mach=200):
+        """基于结构化网格截交线插值计算体积等效截面积 (全机)
+
+        算法与 FABOOM slice 子程序等价:
+        1. 坐标旋转 (迎角)
+        2. 马赫面截距: X = x + z·√(M²-1)
+        3. 各展向站弦向线性插值 → 交点 (y, z_u, z_l)
+        4. S_V = 2·∫(z_u - z_l)dy   (对称加倍, 等价于多边形面积公式)
+        """
+        assert mach >= 1.0, "仅支持超声速 (Ma >= 1)"
+
+        beta = np.sqrt(mach**2 - 1)  # = 1/tan(μ), Prandtl-Glauert 因子
+
+        mesh = self.gene_simple_mesh(n_span, n_chord, aoa)
+
+        # 马赫面截距: xty = x + z·β  (FABOOM: x + (z-H)·β, H偏移最终抵消)
+        x_mach = mesh[..., 0] + mesh[..., 2] * beta  # [2, n_span, n_chord]
+
+        X = np.linspace(x_mach.min(), x_mach.max(), n_mach)
+        y_span = mesh[0, :, 0, 1]
+
+        area = np.zeros(n_mach)
+        for j in range(n_span):
+            # 梯形积分权重
+            if j == 0:
+                w = 0.5 * (y_span[1] - y_span[0])
+            elif j == n_span - 1:
+                w = 0.5 * (y_span[j] - y_span[j - 1])
+            else:
+                w = 0.5 * (y_span[j + 1] - y_span[j - 1])
+
+            # 弦向线性插值 → 马赫面与上下表面的 z 交点
+            zu_k = np.interp(X, x_mach[0, j, :], mesh[0, j, :, 2],
+                             left=np.nan, right=np.nan)
+            zl_k = np.interp(X, x_mach[1, j, :], mesh[1, j, :, 2],
+                             left=np.nan, right=np.nan)
+
+            valid = ~np.isnan(zu_k) & ~np.isnan(zl_k)
+            area[valid] += (zu_k[valid] - zl_k[valid]) * w * 2  # ×2 对称加倍
+
+        return X, area
+
+    def cal_areav_panel(self, mach, aoa=0.0, n_mach=200,
+                        n_span=100, n_chord=200):
+        """基于 panel mesh 重采样 → 结构化网格 → 截交线插值计算 S_V(x) (全机)
+
+        1. 收集 panel mesh 各域上/下表面点云
+        2. LinearNDInterpolator 构建 z(x,y) 插值器
+        3. 规则 (x,y) 网格上弦向插值 + 展向梯形积分 + 对称加倍
+        """
+        assert mach >= 1.0, "仅支持超声速 (Ma >= 1)"
+
+        beta = np.sqrt(mach**2 - 1)  # Prandtl-Glauert 因子 = 1/tan(μ)
+
+        panels = self.gene_panel_mesh(aoa)
+        dom1, dom2 = panels[0], panels[1]
+        dom3, dom4 = panels[2], panels[3]
+        dom6, dom7 = panels[5], panels[6]
+        dom9, dom10 = panels[8], panels[9]
+
+        # 还原 gene_panel_mesh 翻转的下表面 j 方向
+        dom2 = dom2[:, ::-1]
+        dom4 = dom4[:, ::-1]
+        dom7 = dom7[:, ::-1]
+
+        # 收集点云
+        pts_u = np.vstack([d.reshape(-1, 3) for d in [dom1, dom3, dom6, dom9]])
+        pts_l = np.vstack([d.reshape(-1, 3) for d in [dom2, dom4, dom7, dom10]])
+
+        # 展向网格 (半模 y≥0)
+        y_min = max(pts_u[:, 1].min(), pts_l[:, 1].min())
+        y_max = min(pts_u[:, 1].max(), pts_l[:, 1].max())
+        y_grid = np.linspace(y_min, y_max, n_span)
+
+        # 统一马赫面
+        xm_all = np.concatenate([
+            pts_u[:, 0] + pts_u[:, 2] * beta,
+            pts_l[:, 0] + pts_l[:, 2] * beta])
+        X = np.linspace(xm_all.min(), xm_all.max(), n_mach)
+
+        area = np.zeros(n_mach)
+
+        from scipy.interpolate import LinearNDInterpolator
+        interp_u = LinearNDInterpolator(pts_u[:, :2], pts_u[:, 2])
+        interp_l = LinearNDInterpolator(pts_l[:, :2], pts_l[:, 2])
+
+        for j in range(n_span):
+            if j == 0:
+                w = 0.5 * (y_grid[1] - y_grid[0])
+            elif j == n_span - 1:
+                w = 0.5 * (y_grid[j] - y_grid[j - 1])
+            else:
+                w = 0.5 * (y_grid[j + 1] - y_grid[j - 1])
+
+            yj = y_grid[j]
+
+            # 该展向站的有效弦向范围
+            tol = (y_grid[1] - y_grid[0]) * 2
+            mu_mask = np.abs(pts_u[:, 1] - yj) < tol
+            ml_mask = np.abs(pts_l[:, 1] - yj) < tol
+            if mu_mask.sum() < 3 or ml_mask.sum() < 3:
+                continue
+
+            x_min = max(pts_u[mu_mask, 0].min(), pts_l[ml_mask, 0].min())
+            x_max = min(pts_u[mu_mask, 0].max(), pts_l[ml_mask, 0].max())
+            if x_max <= x_min:
+                continue
+            xi = np.linspace(x_min, x_max, n_chord)
+
+            # 2D 插值 → 弦向截面 z(x)
+            zu_xi = interp_u(xi, np.full(n_chord, yj))
+            zl_xi = interp_l(xi, np.full(n_chord, yj))
+
+            ok = ~np.isnan(zu_xi) & ~np.isnan(zl_xi)
+            if ok.sum() < 2:
+                continue
+            xi, zu_xi, zl_xi = xi[ok], zu_xi[ok], zl_xi[ok]
+
+            # 弦向 → 马赫面插值: X = x + z·β
+            xu_m = xi + zu_xi * beta
+            xl_m = xi + zl_xi * beta
+            zu_k = np.interp(X, xu_m, zu_xi, left=np.nan, right=np.nan)
+            zl_k = np.interp(X, xl_m, zl_xi, left=np.nan, right=np.nan)
+            valid = ~np.isnan(zu_k) & ~np.isnan(zl_k)
+            area[valid] += (zu_k[valid] - zl_k[valid]) * w * 2  # ×2 对称加倍
+
+        return X, area
+
     def search_cabin(self):
         mesh = self.air_mesh.reshape([-1, 3])
         total_p = mesh.shape[0]
@@ -664,22 +1224,29 @@ class Aircraft:
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    base_para = pd.read_csv(r"database\\smooth_history.csv", header=None).to_numpy()[-1].reshape([6, 18])
+    # base_para = pd.read_csv(r"database\\smooth_history.csv", header=None).to_numpy()[-1].reshape([6, 18])
     bwb0.read_from_csv(r"mesh_para\tmp_bwb.csv")
     # bwb0 = Aircraft(base_para)
-    bwb0.gene_simple_mesh(41, 41)
-    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0.0)
-    bwb0.write_mesh("simple", "origin.x")
+    # bwb0.gene_simple_mesh(41, 41)
+    # bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0.0)
+    bwb0.write_mesh("simple_nurbs", "origin.x")
+    
+    true_v = np.loadtxt(r"FABOOM_test\area\Area_due_to_Volume.dat", skiprows=1)
+    plt.plot(true_v[:, 0], true_v[:, 1], label="True Area")
+    # X, area = bwb0.cal_areav_2(1.8, 4.9)
+    # plt.plot(X, area)
+    X, area = bwb0.cal_areav_2(1.8, 4.9, 40, 60, 60)
+    plt.plot(X, area)
     # bwb0.export_airfoil_profiles()
     # bwb0.gene_mesh_for_SU2("geo.x", 0.0)
     # new_para = bwb0.reassign_cst_order(4)
 
     # bwb0 = Aircraft(new_para)
-    print(cal_Lift())
-    print(bwb0.cal_volume())
-    print(bwb0.Laplace())
-    print(bwb0.if_smooth(fig=True))
-    print(bwb0.search_cabin())
+    # print(cal_Lift())
+    # print(bwb0.cal_volume())
+    # print(bwb0.Laplace())
+    # print(bwb0.if_smooth(fig=True))
+    # print(bwb0.search_cabin())
     # n_span = 8
     # para0 = bwb0.interp_para(n_span)
     # pd.DataFrame(para0).to_csv(r"mesh_para\\tmp_bwb.csv", index=False)
@@ -706,4 +1273,4 @@ if __name__ == "__main__":
     # air_para.write_mesh("panel", r"geo.x")
     # lift = cal_Lift()
 
-    # plt.show()
+    plt.show()
