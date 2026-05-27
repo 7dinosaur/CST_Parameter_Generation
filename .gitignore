@@ -1,0 +1,10 @@
+FABOOM_test/
+database/
+mesh_para/
+airfoil_profiles/
+.claude/
+.vscode/
+__pycache__/
+*.pyc
+*/
+!.gitignore
