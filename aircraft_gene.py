@@ -57,20 +57,33 @@ class Aircraft:
         self.origin_para:ndarray = mesh_para
         self.cst_order = int(0.5 * (self.origin_para.shape[1] - 8))
     
-    def interp_para(self, num_span, ori_para = None) -> ndarray: #补全对称条件并插值参数列表
+    def interp_para(self, num_span, ori_para = None, sym = True) -> ndarray: #补全对称条件并插值参数列表
         if ori_para is None:
             ori_para = self.origin_para
-        y_list = ori_para[:, 0]
-        full_y_list = np.append(-y_list[1:][::-1], y_list)
-        full_y = np.linspace(y_list[0], y_list[-1], num_span)
-        full_para = full_y.reshape([-1,1])
+        if sym:
+            y_list = ori_para[:, 0]
+            full_y_list = np.append(-y_list[1:][::-1], y_list)
+            full_y = np.linspace(y_list[0], y_list[-1], num_span)
+            full_para = full_y.reshape([-1,1])
 
-        for j in range(self.origin_para.shape[1]-1):
-            full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
-            kind = 1 if j == ori_para.shape[1]-5 else 2
-            f = si.interp1d(full_y_list, full_mesh_para, kind=kind)
-            para = f(full_y).reshape([-1,1])
-            full_para = np.append(full_para, para, axis=1)
+            for j in range(self.origin_para.shape[1]-1):
+                full_mesh_para = np.append(ori_para[:,j+1][1:][::-1], ori_para[:,j+1])
+                kind = 1 if j == ori_para.shape[1]-5 else 2
+                f = si.interp1d(full_y_list, full_mesh_para, kind=kind)
+                para = f(full_y).reshape([-1,1])
+                full_para = np.append(full_para, para, axis=1)
+                # if j == ori_para.shape[1]-6 or j == ori_para.shape[1]-5:
+                #     plt.plot(para, full_y)
+                #     plt.plot(para, -full_y)
+        else:
+            y_list = ori_para[:, 0]
+            full_y = np.linspace(y_list[0], y_list[-1], num_span)
+            full_para = full_y.reshape([-1,1])
+            for j in range(self.origin_para.shape[1]-1):
+                kind = 1 if j == ori_para.shape[1]-5 else 2
+                f = si.interp1d(y_list, ori_para[:,j+1], kind=kind)
+                para = f(full_y).reshape([-1,1])
+                full_para = np.append(full_para, para, axis=1)
         # self.interped_para = full_para
         return full_para
     
@@ -255,13 +268,17 @@ class Aircraft:
         leading_edge_x = this_para[:, 2*order+3]
         leading_edge_y = this_para[:, 0]
         leading_edge_z = this_para[:, 2*order+5]
-        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
-        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
-        leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
-        mask = (leading_edge_x > 3)&(leading_deri > 0.12)&(leading_edge_y > 3.2)
-        idx = np.argmax(mask)
-        dom1_end = leading_edge_x[idx] ##自动选择网格切分点
+        trailing_edge_x = this_para[:, -4]
+        ## 以后缘曲率最大处（转折点）的y值为分块判据
+        dte_dy = np.gradient(trailing_edge_x, leading_edge_y)
+        d2te_dy2 = np.abs(np.gradient(dte_dy, leading_edge_y))
+        idx_te = np.argmax(d2te_dy2[2:-2]) + 2  # 排除边界
+        this_y_end = leading_edge_y[idx_te]
+        f_y_lex = si.interp1d(leading_edge_y, leading_edge_x, kind='quadratic')
+        dom1_end = f_y_lex(this_y_end)
         dom1_start = leading_edge_x[0]
+        f_leading_xy = si.interp1d(leading_edge_x, leading_edge_y, kind='quadratic')
+        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
 
         x_list = np.linspace(dom1_start, dom1_end, nose_i)
         delta_y = this_para[1, 0] - this_para[0, 0]
@@ -269,25 +286,38 @@ class Aircraft:
         dom1[0, :, 1] = dom2[0, :, 1] = this_para[0, 0]
         dom1[0, :, 2] = dom2[0, :, 2] = this_para[0, -3]
         for i, x in enumerate(x_list[1:]):
-            this_y_end = f_leading_xy(x)
-            this_z_end = f_leading_xz(x)
-            mask = this_para[:, 0] < this_y_end - 0.1*delta_y
-            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
+            y_end_at_x = f_leading_xy(x)
+            z_end_at_x = f_leading_xz(x)
+            mask = this_para[:, 0] < y_end_at_x - 0.1*delta_y
+            if not np.any(mask):
+                mask[0] = True  # 至少保留对称面站位
+            tmp_para = this_para[mask].copy()
             coords_this = np.zeros([tmp_para.shape[0]+1, 4])
             coords_this[:, 0] = x
-            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
+            coords_this[:, 1] = np.append(tmp_para[:, 0], y_end_at_x)
             for idx, da in enumerate(tmp_para):
                 psi_end = (x - tmp_para[idx, -5])/(tmp_para[idx, -4] - tmp_para[idx, -5])
                 z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
                 coords_this[idx, 2] = z_u[1, -1]
                 coords_this[idx, 3] = z_l[1, -1]
-            coords_this[-1, 2] = this_z_end
-            coords_this[-1, 3] = this_z_end
-            new_coords = np.ones([nose_j, 3]) * x
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], nose_j)
-            dom1[i+1] = new_coords
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], nose_j)
-            dom2[i+1] = new_coords
+            coords_this[-1, 2] = z_end_at_x
+            coords_this[-1, 3] = z_end_at_x
+            ## 上下表面共用上表面弧长分布的y坐标，避免交叉
+            y_new, zu_new = redistribution(coords_this[:, 1], coords_this[:, 2], nose_j)
+            y_orig = coords_this[:, 1]
+            zl_orig = coords_this[:, 3]
+            y_mir = np.append(-y_orig[1:][::-1], y_orig)
+            zl_mir = np.append(zl_orig[1:][::-1], zl_orig)
+            fx_l = si.Akima1DInterpolator(y_mir, zl_mir)
+            zl_new = fx_l(y_new)
+            new_coords_u = np.ones([nose_j, 3]) * x
+            new_coords_u[:, 1] = y_new
+            new_coords_u[:, 2] = zu_new
+            dom1[i+1] = new_coords_u
+            new_coords_l = np.ones([nose_j, 3]) * x
+            new_coords_l[:, 1] = y_new
+            new_coords_l[:, 2] = zl_new
+            dom2[i+1] = new_coords_l
         dom2 = dom2[:, ::-1]
         #===================================#
 
@@ -303,7 +333,9 @@ class Aircraft:
         end_u, end_l = self.cst_rec(wing_line, self.N1, self.N2, len(x_list))
         for i, x in enumerate(x_list):
             mask = this_para[:, 0] < this_y_end - 0.1*delta_y
-            tmp_para = this_para[mask].copy() #获得从对称面到结束位置的参数
+            if not np.any(mask):
+                mask[0] = True  # 至少保留对称面站位
+            tmp_para = this_para[mask].copy()
             coords_this = np.zeros([tmp_para.shape[0]+1, 4])
             coords_this[:, 0] = x
             coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
@@ -314,11 +346,22 @@ class Aircraft:
                 coords_this[idx, 3] = z_l[1, -1]
             coords_this[-1, 2] = end_u[1, i]
             coords_this[-1, 3] = end_l[1, i]
-            new_coords = np.ones([body_j, 3]) * x
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 2], body_j)
-            dom3[i] = new_coords
-            new_coords[:, 1], new_coords[:, 2] = redistribution(coords_this[:, 1], coords_this[:, 3], body_j)
-            dom4[i] = new_coords
+            ## 上下表面共用上表面弧长分布的y坐标，避免交叉
+            y_new, zu_new = redistribution(coords_this[:, 1], coords_this[:, 2], body_j)
+            y_orig = coords_this[:, 1]
+            zl_orig = coords_this[:, 3]
+            y_mir = np.append(-y_orig[1:][::-1], y_orig)
+            zl_mir = np.append(zl_orig[1:][::-1], zl_orig)
+            fx_l = si.Akima1DInterpolator(y_mir, zl_mir)
+            zl_new = fx_l(y_new)
+            new_coords_u = np.ones([body_j, 3]) * x
+            new_coords_u[:, 1] = y_new
+            new_coords_u[:, 2] = zu_new
+            dom3[i] = new_coords_u
+            new_coords_l = np.ones([body_j, 3]) * x
+            new_coords_l[:, 1] = y_new
+            new_coords_l[:, 2] = zl_new
+            dom4[i] = new_coords_l
         dom4 = dom4[:, ::-1]
         #===================================#
 
@@ -351,8 +394,9 @@ class Aircraft:
         x_begin = x_end
         x_end = this_para[0, -4]
         x_list = np.linspace(x_begin, x_end, tail_i)
-        end_point, _ = self.cst_rec(this_para[0, :], self.N1, self.N2, 2)
-        end_point = np.array([x_end, this_para[0, 0], end_point[-1, 1]])
+        end_u, end_l = self.cst_rec(this_para[0, :], self.N1, self.N2, 2)
+        z_te = 0.5 * (end_u[1, -1] + end_l[1, -1])
+        end_point = np.array([x_end, this_para[0, 0], z_te])
         for j in range(tail_j):
             begin_point_up = dom3[-1, j]
             begin_point_low = dom4[-1, j]
@@ -392,356 +436,13 @@ class Aircraft:
                 mesh = locals()[dom_name]
                 x, z = mesh[..., 0], mesh[..., 2]
                 mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
-        print(f"攻角为{aoa}")
+        # print(f"攻角为{aoa}")
         
         panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)] ##由于分块网格长度尺度不统一用列表存储
 
         return panel_mesh
 
-    
-    def gene_simple_mesh_nurbs(self, num_span=81, num_chord=120, aoa=0.0) -> ndarray:
-        """基于NURBS(B样条)曲面生成简单网格,通过张量积B样条拟合翼型截面"""
-        # 数据截面分辨率 (足够捕获曲面特征,同时避免过拟合)
-        data_span = max(min(num_span, 30), 10)
-        data_chord = max(min(num_chord, 60), 20)
 
-        this_para = self.interp_para(data_span)
-
-        # 参数空间: u=弦向[0,1], v=展向[0,1]
-        u_data = np.linspace(0, 1, data_chord)
-        v_data = np.linspace(0, 1, data_span)
-
-        # 构建数据矩阵 z[i,j] = f(u[i], v[j])
-        xu_data = np.zeros((data_chord, data_span))
-        zu_data = np.zeros((data_chord, data_span))
-        xl_data = np.zeros((data_chord, data_span))
-        zl_data = np.zeros((data_chord, data_span))
-
-        for j, data in enumerate(this_para):
-            coord_u, coord_l = self.cst_rec(data, self.N1, self.N2, data_chord)
-            xu_data[:, j] = coord_u[0, :]
-            zu_data[:, j] = coord_u[1, :]
-            xl_data[:, j] = coord_l[0, :]
-            zl_data[:, j] = coord_l[1, :]
-
-        # 拟合B样条曲面 (NURBS权因子均为1)
-        kx = ky = 3
-        spline_xu = si.RectBivariateSpline(u_data, v_data, xu_data, kx=kx, ky=ky, s=0)
-        spline_zu = si.RectBivariateSpline(u_data, v_data, zu_data, kx=kx, ky=ky, s=0)
-        spline_xl = si.RectBivariateSpline(u_data, v_data, xl_data, kx=kx, ky=ky, s=0)
-        spline_zl = si.RectBivariateSpline(u_data, v_data, zl_data, kx=kx, ky=ky, s=0)
-
-        # 评估网格
-        mesh = np.zeros([2, num_span, num_chord, 3])
-        u_eval = np.linspace(0, 1, num_chord)
-        v_eval = np.linspace(0, 1, num_span)
-        y_eval = np.linspace(this_para[0, 0], this_para[-1, 0], num_span)
-
-        xu_grid = spline_xu(u_eval, v_eval, grid=True)
-        zu_grid = spline_zu(u_eval, v_eval, grid=True)
-        xl_grid = spline_xl(u_eval, v_eval, grid=True)
-        zl_grid = spline_zl(u_eval, v_eval, grid=True)
-
-        for j in range(num_span):
-            mesh[0, j, :, 0] = xu_grid[:, j]
-            mesh[0, j, :, 1] = y_eval[j]
-            mesh[0, j, :, 2] = zu_grid[:, j]
-            mesh[1, j, :, 0] = xl_grid[:, j]
-            mesh[1, j, :, 1] = y_eval[j]
-            mesh[1, j, :, 2] = zl_grid[:, j]
-
-        # 旋转攻角
-        theta = np.radians(-aoa)
-        c, s = np.cos(theta), np.sin(theta)
-        x, z = mesh[..., 0], mesh[..., 2]
-        mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
-
-        self.air_mesh = mesh
-        return mesh
-
-    def gene_panel_mesh_nurbs(self, aoa:float = 3.0, shape = [31, 60, 10, 8, 27]) -> list[ndarray]:
-        """基于NURBS曲面生成分块网格,可输入faboom程序计算"""
-        """前后缘引导线沿用插值策略,剖面之间曲面由NURBS生成"""
-        def redistribution(x, y, n):
-            xtmp = np.linspace(x[0], x[-1], 100)
-            x = np.append(-np.array(x)[1:][::-1], np.array(x))
-            y = np.append(np.array(y)[1:][::-1], np.array(y))
-
-            fx = si.Akima1DInterpolator(x, y)
-
-            y_tmp = fx(xtmp)
-            L = np.zeros(100)
-            for i in range(100 - 1):
-                dx = xtmp[i+1] - xtmp[i]
-                dy = y_tmp[i+1] - y_tmp[i]
-                L[i+1] = (dx**2 + dy**2)**0.5 + L[i]
-            l_total = L[-1]
-            L_inv = si.interp1d(L, xtmp, kind='quadratic')
-            dL = l_total/(n-1)
-            L_pingjun = []
-            for i in range(n):
-                L_pingjun.append(dL*i)
-            x_pingjun = np.append(L_inv(L_pingjun[:-1]), x[-1])
-            y_pingjun = fx(x_pingjun)
-
-            return x_pingjun, y_pingjun
-
-        this_para = self.interp_para(62)
-        order = self.cst_order
-
-        # ============ 统一网格尺度设置 ============
-        nose_i, body_i, tail_i = shape[0], shape[1], shape[2]
-        nose_j = body_j = tail_j = shape[3]
-        wing_i = body_i
-        wing_j = shape[4]
-
-        # NURBS数据分辨率 (高于目标网格以保证拟合精度)
-        data_i_nose = min(nose_i * 2, 50)
-        data_j_nose = min(nose_j * 3, 24)
-        data_i_body = min(body_i * 2, 80)
-        data_j_body = min(body_j * 3, 24)
-        data_i_wing = min(wing_i * 2, 80)
-        data_j_wing = max(wing_j, 30)
-
-        # ============ 初始化所有块 ============
-        dom1, dom2 = np.zeros([nose_i, nose_j, 3]), np.zeros([nose_i, nose_j, 3])
-        dom3, dom4 = np.zeros([body_i, body_j, 3]), np.zeros([body_i, body_j, 3])
-        dom5 = np.zeros([body_i, 2, 3])
-        dom6, dom7 = np.zeros([wing_i, wing_j-1, 3]), np.zeros([wing_i, wing_j, 3])
-        dom8 = np.zeros([body_i, 2, 3])
-        dom9, dom10 = np.zeros([tail_i, tail_j, 3]), np.zeros([tail_i, tail_j, 3])
-        dom11 = np.zeros([tail_j, 2, 3])
-        dom12 = np.zeros([tail_i, 2, 3])
-
-        # ============ 分块逻辑: 前缘引导线及切分点 ============
-        leading_edge_x = this_para[:, 2*order+3]
-        leading_edge_y = this_para[:, 0]
-        leading_edge_z = this_para[:, 2*order+5]
-        f_leading_xy = si.interp1d(leading_edge_x, this_para[:, 0], kind='quadratic')
-        f_leading_xz = si.interp1d(leading_edge_x, leading_edge_z, kind='quadratic')
-        leading_deri = deri_1d(leading_edge_x, this_para[:, 0])
-        mask = (leading_edge_x > 3)&(leading_deri > 0.12)&(leading_edge_y > 3.2)
-        idx = np.argmax(mask)
-        dom1_end = leading_edge_x[idx]
-        dom1_start = leading_edge_x[0]
-
-        delta_y = this_para[1, 0] - this_para[0, 0]
-
-        # ============ 机头网格 (dom1, dom2): NURBS拟合 ============
-        x_list_nose = np.linspace(dom1_start, dom1_end, nose_i)
-
-        # 生成高分辨率数据,跳过展向站点不足的退化位置
-        x_data_all = np.linspace(dom1_start, dom1_end, data_i_nose)
-        v_data_nose = np.linspace(0, 1, data_j_nose)
-
-        y_data_list, zu_data_list, zl_data_list, u_data_list = [], [], [], []
-        for x in x_data_all:
-            this_y_end = f_leading_xy(x)
-            this_z_end = f_leading_xz(x)
-            mask_p = this_para[:, 0] < this_y_end - 0.1*delta_y
-            if np.sum(mask_p) < 2:  # 展向站点不足(靠近机头退化点)
-                continue
-            tmp_para = this_para[mask_p].copy()
-            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
-            coords_this[:, 0] = x
-            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
-            for k, da in enumerate(tmp_para):
-                psi_end = (x - da[-5])/(da[-4] - da[-5])
-                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
-                coords_this[k, 2] = z_u[1, -1]
-                coords_this[k, 3] = z_l[1, -1]
-            coords_this[-1, 2] = this_z_end
-            coords_this[-1, 3] = this_z_end
-            y_j, zu_j = redistribution(coords_this[:, 1], coords_this[:, 2], data_j_nose)
-            _, zl_j = redistribution(coords_this[:, 1], coords_this[:, 3], data_j_nose)
-            y_data_list.append(y_j)
-            zu_data_list.append(zu_j)
-            zl_data_list.append(zl_j)
-            u_data_list.append((x - dom1_start) / (dom1_end - dom1_start))
-
-        u_data_nose = np.array(u_data_list)
-        y_data_nose = np.array(y_data_list)
-        zu_data_nose = np.array(zu_data_list)
-        zl_data_nose = np.array(zl_data_list)
-
-        spline_y_n  = si.RectBivariateSpline(u_data_nose, v_data_nose, y_data_nose,  kx=3, ky=3, s=0)
-        spline_zu_n = si.RectBivariateSpline(u_data_nose, v_data_nose, zu_data_nose, kx=3, ky=3, s=0)
-        spline_zl_n = si.RectBivariateSpline(u_data_nose, v_data_nose, zl_data_nose, kx=3, ky=3, s=0)
-
-        u_eval_nose = np.linspace(0, 1, nose_i)
-        v_eval_nose = np.linspace(0, 1, nose_j)
-        y_grid_n = spline_y_n(u_eval_nose, v_eval_nose, grid=True)
-        zu_grid_n = spline_zu_n(u_eval_nose, v_eval_nose, grid=True)
-        zl_grid_n = spline_zl_n(u_eval_nose, v_eval_nose, grid=True)
-
-        for i in range(nose_i):
-            dom1[i, :, 0] = dom2[i, :, 0] = x_list_nose[i]
-        dom1[0, :, 1] = dom2[0, :, 1] = this_para[0, 0]
-        dom1[0, :, 2] = dom2[0, :, 2] = this_para[0, -3]
-        dom1[1:, :, 1] = y_grid_n[1:, :]
-        dom1[1:, :, 2] = zu_grid_n[1:, :]
-        dom2[1:, :, 1] = y_grid_n[1:, :]
-        dom2[1:, :, 2] = zl_grid_n[1:, :]
-        dom2 = dom2[:, ::-1]
-        # 记录翼身交界面y坐标(沿用原始插值策略保证分块一致性)
-        this_y_end = f_leading_xy(dom1_end)
-
-        # ============ 机身网格 (dom3, dom4): NURBS拟合 ============
-        x_begin = dom1_end
-        trailing_edge_x = this_para[:, -4]
-        f_trailing_yx = si.interp1d(this_para[:, 0], trailing_edge_x, kind='quadratic')
-        x_end = f_trailing_yx(this_y_end)
-        x_list_body = np.linspace(x_begin, x_end, body_i)
-
-        wing_line = self.interp_single_para(this_y_end)
-        end_u_full, end_l_full = self.cst_rec(wing_line, self.N1, self.N2, data_i_body)
-
-        x_data_body = np.linspace(x_begin, x_end, data_i_body)
-        v_data_body = np.linspace(0, 1, data_j_body)
-
-        y_data_b, zu_data_b, zl_data_b, u_data_b_list = [], [], [], []
-        for i, x in enumerate(x_data_body):
-            mask_p = this_para[:, 0] < this_y_end - 0.1*delta_y
-            tmp_para = this_para[mask_p].copy()
-            coords_this = np.zeros([tmp_para.shape[0]+1, 4])
-            coords_this[:, 0] = x
-            coords_this[:, 1] = np.append(tmp_para[:, 0], this_y_end)
-            for k, da in enumerate(tmp_para):
-                psi_end = (x - da[-5])/(da[-4] - da[-5])
-                z_u, z_l = self.cst_rec(da, self.N1, self.N2, 2, psi_end)
-                coords_this[k, 2] = z_u[1, -1]
-                coords_this[k, 3] = z_l[1, -1]
-            coords_this[-1, 2] = end_u_full[1, i]
-            coords_this[-1, 3] = end_l_full[1, i]
-            y_j, zu_j = redistribution(coords_this[:, 1], coords_this[:, 2], data_j_body)
-            _, zl_j = redistribution(coords_this[:, 1], coords_this[:, 3], data_j_body)
-            y_data_b.append(y_j)
-            zu_data_b.append(zu_j)
-            zl_data_b.append(zl_j)
-            u_data_b_list.append((x - x_begin) / (x_end - x_begin))
-
-        u_data_body = np.array(u_data_b_list)
-        y_data_b = np.array(y_data_b)
-        zu_data_b = np.array(zu_data_b)
-        zl_data_b = np.array(zl_data_b)
-
-        spline_y_b  = si.RectBivariateSpline(u_data_body, v_data_body, y_data_b,  kx=3, ky=3, s=0)
-        spline_zu_b = si.RectBivariateSpline(u_data_body, v_data_body, zu_data_b, kx=3, ky=3, s=0)
-        spline_zl_b = si.RectBivariateSpline(u_data_body, v_data_body, zl_data_b, kx=3, ky=3, s=0)
-
-        u_eval_body = np.linspace(0, 1, body_i)
-        v_eval_body = np.linspace(0, 1, body_j)
-        y_grid_b = spline_y_b(u_eval_body, v_eval_body, grid=True)
-        zu_grid_b = spline_zu_b(u_eval_body, v_eval_body, grid=True)
-        zl_grid_b = spline_zl_b(u_eval_body, v_eval_body, grid=True)
-
-        for i in range(body_i):
-            dom3[i, :, 0] = x_list_body[i]
-            dom3[i, :, 1] = y_grid_b[i, :]
-            dom3[i, :, 2] = zu_grid_b[i, :]
-            dom4[i, :, 0] = x_list_body[i]
-            dom4[i, :, 1] = y_grid_b[i, :]
-            dom4[i, :, 2] = zl_grid_b[i, :]
-        dom4 = dom4[:, ::-1]
-
-        # ============ 机翼网格 (dom6, dom7): NURBS拟合 ============
-        mask_wing = this_para[:, 0] > this_y_end + 0.1*delta_y
-        tmp_para_wing = this_para[mask_wing].copy()
-        tmp_para_wing = np.append(wing_line.reshape([1, -1]), tmp_para_wing, axis=0)
-        tmp_para_wing = self.interp_para(data_j_wing, tmp_para_wing)
-
-        u_data_w = np.linspace(0, 1, data_i_wing)
-        v_data_w = np.linspace(0, 1, data_j_wing)
-
-        xu_data_w = np.zeros((data_i_wing, data_j_wing))
-        zu_data_w = np.zeros((data_i_wing, data_j_wing))
-        xl_data_w = np.zeros((data_i_wing, data_j_wing))
-        zl_data_w = np.zeros((data_i_wing, data_j_wing))
-
-        for j, pa in enumerate(tmp_para_wing):
-            wing_u, wing_l = self.cst_rec(pa, self.N1, self.N2, data_i_wing)
-            xu_data_w[:, j] = wing_u[0, :]
-            zu_data_w[:, j] = wing_u[1, :]
-            xl_data_w[:, j] = wing_l[0, :]
-            zl_data_w[:, j] = wing_l[1, :]
-
-        spline_xu_w = si.RectBivariateSpline(u_data_w, v_data_w, xu_data_w, kx=3, ky=3, s=0)
-        spline_zu_w = si.RectBivariateSpline(u_data_w, v_data_w, zu_data_w, kx=3, ky=3, s=0)
-        spline_xl_w = si.RectBivariateSpline(u_data_w, v_data_w, xl_data_w, kx=3, ky=3, s=0)
-        spline_zl_w = si.RectBivariateSpline(u_data_w, v_data_w, zl_data_w, kx=3, ky=3, s=0)
-
-        u_eval_w = np.linspace(0, 1, wing_i)
-        v_eval_w = np.linspace(0, 1, wing_j)
-
-        xu_grid_w = spline_xu_w(u_eval_w, v_eval_w, grid=True)
-        zu_grid_w = spline_zu_w(u_eval_w, v_eval_w, grid=True)
-        xl_grid_w = spline_xl_w(u_eval_w, v_eval_w, grid=True)
-        zl_grid_w = spline_zl_w(u_eval_w, v_eval_w, grid=True)
-
-        y_wing = np.linspace(tmp_para_wing[0, 0], tmp_para_wing[-1, 0], wing_j)
-
-        for j in range(wing_j):
-            if j <= 1:
-                dom5[:, j, 1] = y_wing[j]
-                dom5[:, j, 0] = xu_grid_w[:, j]
-                dom5[:, j, 2] = zu_grid_w[:, j]
-            if j >= 1:
-                dom6[:, j-1, 1] = y_wing[j]
-                dom6[:, j-1, 0] = xu_grid_w[:, j]
-                dom6[:, j-1, 2] = zu_grid_w[:, j]
-            if j == wing_j - 1:
-                dom8[:, :, 1] = y_wing[j]
-                dom8[:, 0, 0] = xu_grid_w[:, j]
-                dom8[:, 0, 2] = zu_grid_w[:, j]
-                dom8[:, 1, 0] = xl_grid_w[:, j]
-                dom8[:, 1, 2] = zl_grid_w[:, j]
-            dom7[:, j, 1] = y_wing[j]
-            dom7[:, j, 0] = xl_grid_w[:, j]
-            dom7[:, j, 2] = zl_grid_w[:, j]
-        dom7 = dom7[:, ::-1]
-
-        # ============ 尾部网格 (dom9, dom10): 直纹面线性插值 ============
-        x_begin_tail = x_end
-        x_end_tail = this_para[0, -4]
-        x_list_tail = np.linspace(x_begin_tail, x_end_tail, tail_i)
-        end_point, _ = self.cst_rec(this_para[0, :], self.N1, self.N2, 2)
-        end_point = np.array([x_end_tail, this_para[0, 0], end_point[-1, 1]])
-        for j in range(tail_j):
-            begin_point_up = dom3[-1, j]
-            begin_point_low = dom4[-1, j]
-            for i, x in enumerate(x_list_tail):
-                x_psi = (x - x_begin_tail)/(x_end_tail - x_begin_tail)
-                dom9[i, j, 0] = dom10[i, j, 0] = x
-                dom9[i, j, 1:] = begin_point_up[1:] + x_psi*(end_point[1:] - begin_point_up[1:])
-                dom10[i, j, 1:] = begin_point_low[1:] + x_psi*(end_point[1:] - begin_point_low[1:])
-        dom9 = dom9[:-1]
-        dom10 = dom10[:-1]
-
-        # ============ 钝底网格 (dom11) ============
-        dom11[:, 1] = dom9[-1]
-        dom11[:, 0] = dom10[-1, ::-1]
-        dom11 = dom11[::-1, ::-1]
-
-        # ============ 尾涡面网格 (dom12) ============
-        dom12[:-1, 0] = dom9[:, -1]
-        dom12[:, 1, [1, 2]] = dom5[-1, 1, [1, 2]]
-        dom12[:-1, 1, 0] = dom12[:-1, 0, 0]; dom12[-1, 1, 0] = 100
-        dom12[0, 1] = dom5[-1, 1]
-        dom12[-1, 0, [1, 2]] = dom9[-1, 1, [1, 2]]
-        dom12[-1, :, 0] = 100
-
-        # ============ 旋转网格 ============
-        theta = np.radians(-aoa)
-        c, s = np.cos(theta), np.sin(theta)
-        for dom_name in [f"dom{i}" for i in range(1, 13)]:
-            if dom_name in locals():
-                mesh = locals()[dom_name]
-                x, z = mesh[..., 0], mesh[..., 2]
-                mesh[..., 0], mesh[..., 2] = x*c - z*s, x*s + z*c
-        print(f"攻角为{aoa}")
-
-        panel_mesh = [locals()[f"dom{i}"] for i in range(1, 13)]
-        return panel_mesh
 
     def write_mesh(self, mesh_type:str = "panel", file_path:str = "geo.x", aoa = 3.0) -> None:
         """自动识别网格类型并写入文件
@@ -951,11 +652,6 @@ class Aircraft:
             n_turn_u += np.sum(deri2_u**2)
             deri2_l = np.gradient(deri_l, line_l[:, 1])
             n_turn_l += np.sum(deri2_l**2)
-            # for i in range(len(deri2_u)-1):
-            #     if (deri2_u[i] * deri2_u[i+1] < 0):
-            #         n_turn_u += 1
-            #     if (deri2_l[i] * deri2_l[i+1] < 0):
-            #         n_turn_l += 1
             if fig:
                 plt.subplot(1, 3, 1)
                 plt.plot(line_u[:, 1], line_u[:, 2])
@@ -969,26 +665,26 @@ class Aircraft:
         
         return np.array([n_turn_u, n_turn_l])
     
-    def if_smooth_new(self, fig = False):
-        mesh = self.air_mesh
-        u_line1 = []; u_line2 = []; l_line1 = []; l_line2 = []
-        if fig:
-            plt.figure(figsize=(16, 5))
-        n_turn_u = 0
-        n_turn_l = 0
-        for i_span in range(41):
-            sec_u = mesh[0, i_span, :]
-            sec_l = mesh[1, i_span, :]
-            u_line1.append([sec_u[0, 1], np.max(sec_u[:, 2])])
-            u_line2.append([sec_u[0, 1], np.min(sec_u[:, 2])])
-            l_line1.append([sec_l[0, 1], np.max(sec_l[:, 2])])
-            l_line2.append([sec_l[0, 1], np.min(sec_l[:, 2])])
+    
+    def tail_new(self):
+        mesh = self.gene_panel_mesh(0)
+        dom_tail_u = mesh[8]
+        dom_tail_l = mesh[9]
 
-        line = [np.array(line) for line in [u_line1, u_line2, l_line1, l_line2]]
-        for l in line:
-            plt.plot(l[:, 0], l[:, 1])
-        
-        return n_turn_u, n_turn_l
+        penalty = 0.0
+
+        lu = dom_tail_u[0]
+        ll = dom_tail_l[0][::-1]
+        plt.plot(lu[:, 1], lu[:, 2])
+        plt.plot(ll[:, 1], ll[:, 2])
+
+        for j in range(8):
+            if lu[j, 2] - ll[j, 2] < -1e-10:
+                penalty += 1
+                plt.scatter(lu[j, 1], lu[j, 2])
+                plt.scatter(ll[j, 1], ll[j, 2])
+
+        return penalty
 
     def Laplace(self) -> list[float]:
         mesh_u, mesh_l = self.air_mesh[0], self.air_mesh[1]
@@ -1028,52 +724,205 @@ class Aircraft:
 
         return laplace_norm
 
-    def cal_areav(self, mach, aoa=0.0):
-        mesh = self.gene_simple_mesh(200, 600, aoa).reshape([2, -1, 3])
-        ## 沿x轴移动马赫面，直到所有网格点都在马赫面前方
-        mach_theta = np.arcsin(1/mach)
-        pres = 100
-        area_v = [[[], []] for _ in range(pres)]
-        for ch in range(2):
-            x_list = []
-            for coord in mesh[ch]:
-                if abs(coord[2]) < 1e-6:
-                    x_list.append(coord[0])
-                else:
-                    x_list.append(coord[2]/np.tan(mach_theta)+coord[0])
-            x_min, x_max = min(x_list), max(x_list)
-            # print(min(x_list), max(x_list))
-            
-            for idx, x in enumerate(x_list):
-                area_idx = int(round((x - x_min)/(x_max - x_min)*(pres-1)))
-                area_v[area_idx][ch].append(mesh[ch, idx])
+    def param_smoothness(self, normalize: bool = True, n_dense: int = 51) -> dict:
+        """展向设计参数光顺度判据：弯曲能 + 拐点数
 
-        area_axis = np.linspace(x_min, x_max, pres)
-        area = np.column_stack((area_axis, np.zeros_like(area_axis)))
-        for i in range(pres):
-            v_u = np.array(area_v[i][0])
-            v_l = np.array(area_v[i][1])
-            l = min(v_u.shape[0], v_l.shape[0])
-            sec = 0
-            for j in range(l):
-                try:
-                    h = (v_u[-1-j, 2] - v_l[-1-j, 2])/np.sin(mach_theta)
-                    sec += h*(v_u[-1-j, 1] - v_u[-2-j, 1])
-                except:
-                    sec += h*(v_l[-1-j, 1])
-                
-            area[i, 1] = sec
+        直接对 origin_para 各列的展向分布做检查，而非对网格。
+        先对每条参数曲线做三次样条插值到 n_dense 个点，再计算：
+        - 弯曲能 ∫(d²p/dy²)² dy：惩罚曲率幅值大
+        - 拐点数 d²p/dy² 符号变化次数：惩罚来回振荡（小幅高频也能捕获）
 
-        # print("体积等效截面积", area[:, 1].sum())
-        true_v = np.loadtxt(r"FABOOM_test\area\Area_due_to_Volume.dat", skiprows=1)
-        plt.plot(true_v[:, 0], true_v[:, 1], label="True Area")
-        plt.plot(area[:, 0], area[:, 1])
+        两者互补 —— 小幅高频振荡弯曲能小但拐点多，大幅单弯拐点少但弯曲能大。
+        插值到密网格保证拐点计数反映连续曲线行为，而非离散采样的数值噪声。
+        normalize=True 时每个参数归一化到 [0,1] 后计算，使不同量纲可比。
 
-        # np.savetxt("test_area.dat", area)
+        Returns:
+            score:           float  综合得分（越低越光顺，可直接与 baseline 比较）
+            bending_total:   float  总归一化弯曲能
+            inflection_total: int   总拐点数
+            details:         dict   逐参数明细 {name: (bending, n_infl)}
+        """
+        from scipy.interpolate import CubicSpline
 
-        return area[:, 1].sum()
+        para = self.origin_para
+        y = para[:, 0]
+        order = self.cst_order
+        y_dense = np.linspace(y[0], y[-1], n_dense)
 
-    def cal_areav_2(self, mach, aoa=0.0, n_span=200, n_chord=600, n_mach=200):
+        # 待检查的展向参数列
+        param_cols = {}
+        param_cols['le']       = para[:, -5]
+        param_cols['te']       = para[:, -4]
+        param_cols['chord']    = para[:, -4] - para[:, -5]
+        param_cols['z_offset'] = para[:, -3]
+        param_cols['dy_upper'] = para[:, -2]
+        param_cols['dy_lower'] = para[:, -1]
+        for i in range(order + 1):
+            param_cols[f'cst_u_{i}'] = para[:, 1 + i]
+            param_cols[f'cst_l_{i}'] = para[:, 1 + order + i]
+
+        details = {}
+        bending_total = 0.0
+        inflection_total = 0
+
+        for name, values in param_cols.items():
+            # 三次样条插值到密网格，用样条解析二阶导（避免有限差分噪声）
+            cs = CubicSpline(y, values)
+            v_dense = cs(y_dense)
+            d2 = cs(y_dense, 2)  # CubicSpline 解析二阶导
+
+            v_range = np.max(v_dense) - np.min(v_dense)
+            if normalize and v_range > 1e-10:
+                v_dense = (v_dense - np.min(v_dense)) / v_range
+                d2 = d2 / v_range  # 二阶导同步缩放
+
+            # 弯曲能: ∫(d²p/dy²)² dy  梯形积分
+            dy_dense = np.diff(y_dense)
+            bend = float(np.sum(0.5 * (d2[:-1]**2 + d2[1:]**2) * dy_dense))
+
+            # 拐点数: 二阶导数符号变化次数（忽略幅度 < 1e-8 的零穿越）
+            signs = np.sign(d2)
+            nonzero = signs[np.abs(d2) > 1e-8]
+            n_infl = int(np.sum(np.abs(np.diff(nonzero)) > 0)) if len(nonzero) > 1 else 0
+
+            details[name] = (bend, n_infl)
+
+            # 几何参数权重 1.0，CST 系数权重 0.3
+            is_geom = name in ('le', 'te', 'chord', 'z_offset', 'dy_upper', 'dy_lower')
+            w = 1.0 if is_geom else 0.3
+            bending_total += w * bend
+            inflection_total += int(w * n_infl) if is_geom else (1 if n_infl > 1 else 0)
+
+        # 拐点数的惩罚系数：1 个拐点 ≈ 一定量的弯曲能
+        score = bending_total + inflection_total**2 * 0.5
+
+        return {
+            'score':           score,
+            'bending_total':   bending_total,
+            'inflection_total': inflection_total,
+            'details':         details,
+        }
+
+    def surface_smoothness(self, n_chord_stations: int = 19) -> float:
+        """基于等弦长点展向曲线的外形光顺度判据
+
+        对 8 个剖面的 CST 曲线在 n_chord_stations 个等 psi 位置采样，
+        每个弦向站上下表面各得一条展向 z 曲线（共 2*n_chord_stations 条），
+        对每条曲线计算归一化弯曲能 + 拐点数后求和。
+
+        仅返回一个 float，方便优化器中直接调用。
+        若 19 站超 1s，改用 9 站。
+        """
+        from scipy.interpolate import CubicSpline
+
+        para = self.origin_para
+        n_sec = len(para)
+        y_span = para[:, 0]
+
+        # 1. 每个剖面生成 CST 曲线，只取 z 坐标
+        z_up = np.empty((n_sec, n_chord_stations))
+        z_lo = np.empty((n_sec, n_chord_stations))
+        for i, row in enumerate(para):
+            cu, cl = self.cst_rec(row, self.N1, self.N2, n_chord_stations)
+            z_up[i] = cu[1]
+            z_lo[i] = cl[1]
+
+        # 2. 逐弦向站检查展向光顺度
+        total_score = 0.0
+        for j in range(n_chord_stations):
+            for z_curve in [z_up[:, j], z_lo[:, j]]:
+                cs = CubicSpline(y_span, z_curve)
+                y_d = np.linspace(y_span[0], y_span[-1], 51)
+                d2 = cs(y_d, 2)
+                z_d = cs(y_d)
+
+                rng = np.max(z_d) - np.min(z_d)
+                if rng > 1e-8:
+                    d2 = d2 / rng
+
+                dy_d = np.diff(y_d)
+                bend = float(np.sum(0.5 * (d2[:-1]**2 + d2[1:]**2) * dy_d))
+
+                signs = np.sign(d2)
+                nz = signs[np.abs(d2) > 1e-8]
+                n_infl = int(np.sum(np.abs(np.diff(nz)) > 0)) if len(nz) > 1 else 0
+
+                # 曲率总变差：惩罚曲率剧烈变化（鼓包/突变，无论拐点有无）
+                tv_curv = float(np.sum(np.abs(np.diff(d2))))
+
+                total_score += bend + n_infl**2 * 2.0 + tv_curv * 0.5
+
+        return total_score
+
+    def check_le_te(self) -> float:
+        """前后缘展向曲线几何合理性检查
+
+        约束：
+        1. 前缘 le(y) 单调递增（后掠角不反向）
+        2. 前缘 d²le/dy² ≤ 0（后掠角沿展向递减，物理合理）
+        3. 后缘 te(y) 最多一次转折（允许类 baseline 的先减后增）
+        4. 后缘 x ≤ 对称面后缘 x（te 不超出机身末端）
+        5. 前后缘不交叉：te > le 处处成立（弦长 > 0）
+
+        Returns:
+            penalty: float, 0 = 全部满足, >0 = 违规程度
+        """
+        para = self.origin_para
+        y = para[:, 0]
+        le = para[:, -5]
+        te = para[:, -4]
+
+        penalty = 0.0
+
+        # 1. 前缘单调递增
+        dle = np.diff(le)
+        viol = dle < 0
+        if np.any(viol):
+            penalty += np.sum(dle[viol] ** 2)
+
+        # 2. 前缘 d²le/dy² ≤ 0（后掠角沿展向递减）
+        # 使用离散二阶差分直接检查设计参数（dy=2 均匀）
+        ddle = np.diff(le, n=2)
+        viol = ddle > 1e-8
+        if np.any(viol):
+            penalty += np.sum(ddle[viol] ** 2)
+
+        # 3. 后缘最多一次转折（dte 符号变化次数 ≤ 1）
+        dte = np.diff(te)
+        signs = np.sign(dte)
+        nonzero = signs[signs != 0]
+        n_turns = int(np.sum(np.abs(np.diff(nonzero)) > 0)) if len(nonzero) > 1 else 0
+        if n_turns > 1:
+            penalty += (n_turns - 1) * 10.0
+
+        # 4. 后缘 x ≤ 对称面后缘 x
+        over = te - te[0]
+        if np.any(over > 0):
+            penalty += np.sum(over[over > 0] ** 2)
+
+        # 5. 前后缘不交叉: te > le
+        gap = te - le
+        if np.any(gap <= 0):
+            penalty += np.sum(gap[gap <= 0] ** 2) * 100.0
+
+        return penalty
+
+    def check_z_offset(self, tol: float = 0.05) -> float:
+        """z_offset 展向单调性检查（防止鼓包）
+
+        z_offset 应沿展向单调递增（至少不显著下降），下降量超过 tol 即违规。
+
+        Returns:
+            penalty: float, 0 = 单调（或下降在容差内）, >0 = 违规程度
+        """
+        zo = self.origin_para[:, -3]
+        dz = np.diff(zo)
+        viol = dz < -tol
+        if np.any(viol):
+            return float(np.sum(dz[viol] ** 2))
+        return 0.0
+
+    def cal_areav_2(self, mach, aoa=0.0, n_span=40, n_chord=60, n_mach=200):
         """基于结构化网格截交线插值计算体积等效截面积 (全机)
 
         算法与 FABOOM slice 子程序等价:
@@ -1095,6 +944,7 @@ class Aircraft:
         y_span = mesh[0, :, 0, 1]
 
         area = np.zeros(n_mach)
+        bad_stations = 0
         for j in range(n_span):
             # 梯形积分权重
             if j == 0:
@@ -1111,9 +961,23 @@ class Aircraft:
                              left=np.nan, right=np.nan)
 
             valid = ~np.isnan(zu_k) & ~np.isnan(zl_k)
-            area[valid] += (zu_k[valid] - zl_k[valid]) * w * 2  # ×2 对称加倍
+            if valid.sum() < 2:
+                bad_stations += 1
+                continue
 
-        return X, area
+            dz = zu_k[valid] - zl_k[valid]
+            # 上下表面交叉(畸形几何): 超过30%有效点 zu<zl 则跳过该站位
+            if (dz < 0).sum() > 0.3 * valid.sum():
+                bad_stations += 1
+                continue
+
+            area[valid] += dz * w * 2  # ×2 对称加倍
+
+        # 超过一半展向站位异常 → 几何不合理, 返回 NaN 标记供调用方识别
+        if bad_stations > n_span // 2:
+            return np.array([[np.nan, np.nan]])
+
+        return np.vstack([X, area]).T
 
     def cal_areav_panel(self, mach, aoa=0.0, n_mach=200,
                         n_span=100, n_chord=200):
@@ -1207,7 +1071,7 @@ class Aircraft:
         chaos = 0
         ## 定义客舱尺寸，展向有微量收缩作为容差
         cabin_top = 1.55; cabin_height = 2.0
-        cabin_begin = 22; cabin_len = 40*0.97; cabin_half_width = (4*0.55+0.5)/2; tol = 0.05
+        cabin_begin = 20; cabin_len = 40*0.95; cabin_half_width = (4*0.55+0.5)/2; tol = 0.05
         cabin_end = cabin_begin + cabin_len; cabin_ground = cabin_top - cabin_height
         for point in mesh:
             if (point[0] > cabin_begin) and (point[0] < cabin_end):
@@ -1217,60 +1081,28 @@ class Aircraft:
                     if (point[2] < u_edge) and (point[2] > l_edge):
                         chaos += 1
 
-        if chaos/total_p < 0.01:
-            return True
-        else:
-            return False
+        return chaos/total_p
+        
+    def ref_area(self):
+        para = self.origin_para
+        area = 0
+        for i in range(para.shape[0]-1):
+            c1, c2 = (para[i+1, -4] - para[i+1, -5]), (para[i, -4] - para[i, -5])
+            dy = para[i+1, 0] - para[i, 0]
+            area += 0.5 * (c1 + c2) * dy
+
+        return area
 
 if __name__ == "__main__":
     bwb0 = Aircraft()
-    # base_para = pd.read_csv(r"database\\smooth_history.csv", header=None).to_numpy()[-1].reshape([6, 18])
-    bwb0.read_from_csv(r"mesh_para\tmp_bwb.csv")
-    # bwb0 = Aircraft(base_para)
-    # bwb0.gene_simple_mesh(41, 41)
-    # bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0.0)
-    bwb0.write_mesh("simple_nurbs", "origin.x")
-    
-    true_v = np.loadtxt(r"FABOOM_test\area\Area_due_to_Volume.dat", skiprows=1)
-    plt.plot(true_v[:, 0], true_v[:, 1], label="True Area")
-    # X, area = bwb0.cal_areav_2(1.8, 4.9)
-    # plt.plot(X, area)
-    X, area = bwb0.cal_areav_2(1.8, 4.9, 40, 60, 60)
-    plt.plot(X, area)
-    # bwb0.export_airfoil_profiles()
-    # bwb0.gene_mesh_for_SU2("geo.x", 0.0)
-    # new_para = bwb0.reassign_cst_order(4)
+    bwb0.read_from_csv(r"baseline_6tip.csv")
+    print(bwb0.if_smooth())
+    print(bwb0.search_cabin())
+    print(bwb0.tail_new())
+    print(bwb0.ref_area())
+    bwb0.write_mesh("simple", "test.x", 0)
+    bwb0.write_mesh("panel", r"FABOOM_test\indata\geo.x", 0)
+    print(cal_Lift())
 
-    # bwb0 = Aircraft(new_para)
-    # print(cal_Lift())
-    # print(bwb0.cal_volume())
-    # print(bwb0.Laplace())
-    # print(bwb0.if_smooth(fig=True))
-    # print(bwb0.search_cabin())
-    # n_span = 8
-    # para0 = bwb0.interp_para(n_span)
-    # pd.DataFrame(para0).to_csv(r"mesh_para\\tmp_bwb.csv", index=False)
-
-    ##==========================================================================================##
-    ## 样本集测试
-    ##==========================================================================================##
-    # para = pd.read_csv(r"database\samples_based_manual.csv").to_numpy()[0, 2:].reshape([1, -1])
-    # new_pa = para.reshape([-1, 24])
-    # # pd.DataFrame(new_pa).to_csv("165_6.64.csv", index=False)
-    # air_para = Aircraft(new_pa)
-    # air_para.write_mesh("panel", r"FABOOM_test\indata\geo.x", 3.45)
-    # print(cal_Lift())
-    # print(air_para.cal_volume())
-    # print(air_para.Laplace())
-    # print(air_para.if_smooth())
-    # for pa in para[:5]:
-    #     air_para = Aircraft(pa.reshape([-1, 24]))
-    #     print(air_para.Laplace())
-    #     print(air_para.Laplace_panel())
-    #     print(air_para.if_smooth())
-    #     air_para.write_mesh("panel", r"check.x", 0)
-    #     input("Press Enter to continue...")
-    # air_para.write_mesh("panel", r"geo.x")
-    # lift = cal_Lift()
-
+    # plt.axis('equal')
     plt.show()

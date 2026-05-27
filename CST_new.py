@@ -132,7 +132,7 @@ def flatten(data):
      return np.array(data).flatten()
 
 if __name__ == "__main__":
-    folder_path = r"processed_sec"
+    folder_path = r"sc001_sec_pro"
     file_names = os.listdir(folder_path)
     print(file_names)
     y_list = []
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     mesh_para = []
     for y in y_list:
         data = np.loadtxt(f'{folder_path}\\y={y}.dat')
-        cst_order = 5
+        cst_order = 8
         N1 = 0.5
         N2 = 1
         coord_norm, le, te, z_offset = process_airfoil_coordinates(data)
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         # print(y, coeffs, le, te, z_offset, dy_upper, dy_lower)
     mesh_para = np.array(mesh_para)
     csv_data = pd.DataFrame(mesh_para)
-    csv_data.to_csv(r"new_sbwb.csv", index=False)
-    mesh_para = pd.read_csv(r"new_sbwb.csv").to_numpy()
+    csv_data.to_csv(r"mesh_para\\sc001.csv", index=False)
+    mesh_para = pd.read_csv(r"mesh_para\\sc001.csv").to_numpy()
     print(mesh_para)
     plt.show()

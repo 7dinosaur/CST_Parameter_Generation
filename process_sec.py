@@ -93,4 +93,4 @@ def process_sec(origin_folder, new_folder='processed_sec'):
                     f.write(f"{x:.10e} {y:.10e}\n")
 
 if __name__ == "__main__":
-    process_sec('new_sbwb_sec')
+    process_sec('sc001_sec', 'sc001_sec_pro')
